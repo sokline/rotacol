@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>НЕБУШКО — карта агентов</title>
+
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+      onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
+
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; overflow:hidden;
+               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+  /* SETUP */
+  #setup { position: fixed; inset: 0; background: #eef1f6; z-index: 5000;
+           display: flex; align-items: center; justify-content: center; padding: 20px; }
+  #setup .box { background:#fff; padding: 28px; border-radius: 16px;
+                box-shadow: 0 10px 40px rgba(0,0,0,.1); width: 100%; max-width: 460px; }
+  #setup h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: 1px; }
+  #setup .sub { font-size: 12px; color:#888; letter-spacing: 2px; margin-bottom: 20px; }
+  #setup p  { margin: 0 0 20px; color:#666; font-size: 14px; line-height: 1.5; }
+  #setup label { font-size: 13px; color:#666; display:block; margin-bottom: 6px; }
+  #setup input, #setup select {
+    width: 100%; padding: 14px; font-size: 16px; border: 1px solid #ddd;
+    border-radius: 10px; background: #fafbfc; margin-bottom: 14px;
+    -webkit-appearance: none; appearance: none;
+  }
+  #setup input:focus, #setup select:focus { outline:none; border-color:#1a1a1a; background:#fff; }
+  #setup button { width: 100%; padding: 16px; font-size: 17px; font-weight: 600;
+                  border: none; border-radius: 12px; background: #1a1a1a; color:#fff; cursor:pointer; }
+  #setup button:active { transform: scale(.98); }
+  #setup button:disabled { background:#9aa; cursor: wait; }
+  #setup .hint { margin-top: 14px; font-size: 12px; color:#888; line-height: 1.5; }
+  #setup .adv { margin-top: 14px; font-size: 13px; color:#555; }
+  #setup .adv summary { cursor: pointer; color:#1a1a1a; font-weight: 500; }
+
+  /* APP */
+  #app { display: none; height: 100vh; width: 100vw; }
+  #app.visible { display: flex; }
+  #map { flex: 1; background: #e5e7eb; }
+
+  #sidebar { width: 340px; background:#fff; display:flex; flex-direction: column;
+             border-left: 1px solid #e5e7eb; box-shadow: -4px 0 20px rgba(0,0,0,.05); z-index: 1000; }
+  #sidebar header { padding: 12px 14px; border-bottom: 1px solid #eee;
+                    display:flex; align-items:center; gap: 8px; }
+  #sidebar h2 { margin: 0; font-size: 15px; flex: 1; letter-spacing: 1px; }
+  #conn { font-size: 11px; padding: 3px 8px; border-radius: 10px;
+          background: #eee; color: #666; white-space: nowrap; }
+  #conn.on  { background:#d4f5dd; color:#0a5c2e; }
+  #conn.err { background:#ffe0e0; color:#900; }
+  .btn-icon { border: none; background:#f3f4f6; padding: 6px 9px; border-radius: 8px;
+              cursor: pointer; font-size: 14px; line-height: 1; }
+  .btn-icon:hover { background:#e5e7eb; }
+
+  #list { overflow-y: auto; flex: 1; }
+  .driver { padding: 12px 16px; border-bottom: 1px solid #f0f0f0;
+            cursor: pointer; transition: background .15s; }
+  .driver:hover { background:#f8fafc; }
+  .driver .top { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .driver .name { font-weight:600; font-size:15px; flex:1; }
+  .driver .dot { width:10px; height:10px; border-radius:50%; background:#9ca3af; flex-shrink:0; }
+  .driver.on .dot { background:#22c55e; animation: pulse 1.8s infinite; }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  }
+  .driver .meta  { font-size: 12px; color:#888; }
+  .driver .coord { font-size: 12px; color:#444; margin-top: 2px;
+                   font-family: ui-monospace, Menlo, monospace; }
+  .driver .ago   { font-size: 11px; color:#999; margin-top: 3px; }
+  .driver .gmap  { display:inline-block; margin-top: 6px; font-size: 12px;
+                   color:#1a1a1a; text-decoration: none; font-weight:500; }
+  #empty { padding: 40px 20px; text-align:center; color:#999; font-size: 14px; line-height:1.6; }
+
+  /* Подписи под маркерами */
+  .leaflet-tooltip.driver-label {
+    background: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a1a1a;
+    box-shadow: 0 1px 6px rgba(0,0,0,.22);
+    white-space: nowrap;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .leaflet-tooltip.driver-label::before { display: none; }
+  .leaflet-tooltip.driver-label.is-online  { border-left: 3px solid #22c55e; color: #0a3d20; }
+  .leaflet-tooltip.driver-label.is-offline { border-left: 3px solid #9ca3af; color: #555; opacity: .85; }
+  .leaflet-tooltip.driver-label .label-time {
+    font-weight: 400; color: #666; margin-left: 4px; font-size: 11px;
+  }
+  .leaflet-tooltip.driver-label.is-offline .label-time { color: #999; }
+  .leaflet-tooltip.driver-label:hover { background: #f3f6fb; }
+
+  /* Плавающий выбор карты */
+  #baseSwitch {
+    position: fixed; top: 12px; left: 12px; z-index: 1100;
+    background: #fff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    padding: 6px; display: flex; gap: 4px;
+  }
+  #baseSwitch select {
+    border: none; background: transparent; font-size: 13px; font-weight: 500;
+    padding: 6px 8px; border-radius: 6px; cursor: pointer; color:#1a1a1a;
+    outline: none; max-width: 200px;
+  }
+  #baseSwitch select:hover { background: #f3f4f6; }
+
+  @media (max-width: 767px) {
+    #sidebar { position: fixed; top:0; right:0; bottom:0; width: 85%; max-width: 340px;
+               transform: translateX(100%); transition: transform .25s; }
+    #sidebar.open { transform: none; }
+    #toggle { position: fixed; bottom: 20px; right: 20px; z-index: 1100;
+              width: 56px; height: 56px; border-radius: 50%; border: none;
+              background: #1a1a1a; color:#fff; font-size: 24px;
+              box-shadow: 0 4px 16px rgba(0,0,0,.35); cursor: pointer; }
+    #baseSwitch select { max-width: 150px; font-size: 12px; }
+  }
+  @media (min-width: 768px) { #toggle, #close { display:none !important; } }
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="box">
+    <h1>НЕБУШКО</h1>
+    <div class="sub">ЦЕНТР НАБЛЮДЕНИЯ</div>
+    <p>Введите код и ключ группы. Ключ выдаётся агентам <b>отдельно от кода</b> — тогда его утечка из переписки не раскроет данные.</p>
+
+    <label for="topic">Код группы</label>
+    <input id="topic" placeholder="park-a1b2c3" autocomplete="off">
+
+    <label for="groupkey">Ключ группы</label>
+    <input id="groupkey" type="password" placeholder="секретное-слово" autocomplete="off">
+
+    <details class="adv">
+      <summary>Дополнительно</summary>
+      <label for="broker" style="margin-top:10px">Сервер связи</label>
+      <select id="broker">
+        <option value="auto">Автоматически (рекомендуется)</option>
+        <option value="broker.emqx.io:8084/mqtt">broker.emqx.io</option>
+        <option value="broker.hivemq.com:8884/mqtt">broker.hivemq.com</option>
+        <option value="test.mosquitto.org:8081/mqtt">test.mosquitto.org</option>
+      </select>
+      <div class="hint" style="margin-top:0">Если не подключается — выберите вручную.</div>
+
+      <label for="baseMap" style="margin-top:12px">Стиль карты</label>
+      <select id="baseMap">
+        <option value="positron">🌍 Positron (светлая)</option>
+        <option value="hot">🛣 OSM HOT</option>
+        <option value="de">🇩🇪 OSM DE</option>
+        <option value="esri">🏙 Esri World Street</option>
+        <option value="topo">⛰ OpenTopoMap</option>
+        <option value="sat">🛰 Спутник (Esri)</option>
+      </select>
+    </details>
+
+    <button id="connect" style="margin-top:16px">Подключиться</button>
+    <div class="hint">
+      Код и ключ вводятся вручную и в URL не попадают.
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="map"></div>
+
+  <div id="baseSwitch">
+    <select id="baseMapFloat" title="Стиль карты">
+      <option value="positron">🌍 Positron</option>
+      <option value="hot">🛣 OSM HOT</option>
+      <option value="de">🇩🇪 OSM DE</option>
+      <option value="esri">🏙 Esri Street</option>
+      <option value="topo">⛰ Топо</option>
+      <option value="sat">🛰 Спутник</option>
+    </select>
+  </div>
+
+  <button id="toggle" aria-label="Список">☰</button>
+  <aside id="sidebar">
+    <header>
+      <h2>АГЕНТЫ</h2>
+      <span id="conn">…</span>
+      <button class="btn-icon" id="fit"    title="Показать всех">🎯</button>
+      <button class="btn-icon" id="change" title="Сменить группу">⚙</button>
+      <button class="btn-icon" id="close"  title="Закрыть">✕</button>
+    </header>
+    <div id="list"></div>
+  </aside>
+</div>
+
+<script>
+// ============ CDN-загрузчики ============
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = url; s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('fail ' + url));
+    document.head.appendChild(s);
+  });
+}
+function loadScriptAny(urls) {
+  let p = Promise.reject();
+  urls.forEach(u => { p = p.catch(() => loadScript(u)); });
+  return p;
+}
+const MQTT_CDNS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.5/mqtt.min.js',
+  'https://cdn.jsdelivr.net/npm/mqtt@5.3.5/dist/mqtt.min.js',
+  'https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js'
+];
+const LEAFLET_CDNS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+  'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+];
+
+// ============ Базовые карты ============
+const BASE_MAPS = {
+  positron: {
+    name: '🌍 Positron',
+    make: () => L.tileLayer('https://tiles.openfreemap.org/styles/positron/{z}/{x}/{y}.png', {
+      maxZoom: 20, attribution: '© OpenStreetMap, © OpenFreeMap'
+    })
+  },
+  hot: {
+    name: '🛣 OSM HOT',
+    make: () => L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+      subdomains: 'abc', maxZoom: 19, attribution: '© OpenStreetMap, HOT'
+    })
+  },
+  de: {
+    name: '🇩🇪 OSM DE',
+    make: () => L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap'
+    })
+  },
+  esri: {
+    name: '🏙 Esri Street',
+    make: () => L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19, attribution: 'Tiles © Esri' }
+    )
+  },
+  topo: {
+    name: '⛰ Топо',
+    make: () => L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      subdomains: 'abc', maxZoom: 17, attribution: '© OpenStreetMap, SRTM | © OpenTopoMap'
+    })
+  },
+  sat: {
+    name: '🛰 Спутник',
+    make: () => L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' }
+    )
+  }
+};
+
+// ============ КРИПТО ============
+function b64urlToBytes(s) {
+  const b64 = s.replace(/-/g,'+').replace(/_/g,'/');
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function deriveRoomHash(groupCode, groupKey) {
+  const data = new TextEncoder().encode(groupCode + ':' + groupKey + ':v1');
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hex  = [...new Uint8Array(hash)]
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0, 24);
+}
+async function deriveCryptoKey(groupCode, groupKey) {
+  const base = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(groupCode + ':' + groupKey + ':enc'),
+    { name: 'PBKDF2' }, false, ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: new TextEncoder().encode('rotacol-salt-v1'),
+      iterations: 100000, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+  );
+}
+async function decryptPayload(key, b64url) {
+  const raw = b64urlToBytes(b64url);
+  const iv  = raw.slice(0, 12);
+  const ct  = raw.slice(12);
+  const pt  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+// ============ ОСНОВНАЯ ЛОГИКА ============
+(function () {
+  const OFFLINE_AFTER = 90000;
+  const TOPIC_PREFIX  = 'rotacol-v1';
+  const LS_BASEMAP    = 'disp.baseMap';
+
+  const $ = id => document.getElementById(id);
+  const setupEl   = $('setup');
+  const appEl     = $('app');
+  const topicEl   = $('topic');
+  const groupKeyEl= $('groupkey');
+  const brokerEl  = $('broker');
+  const baseMapSel   = $('baseMap');
+  const baseMapFloat = $('baseMapFloat');
+  const connEl    = $('conn');
+  const listEl    = $('list');
+  const sidebar   = $('sidebar');
+  const connectBtn = $('connect');
+
+  let map = null;
+  let currentBaseLayer = null;
+  let currentBaseKey = 'positron';
+  let client = null;
+  let cryptoKey = null;
+  let baseTopic = '';
+  let didInitialCenter = false;
+
+  const drivers = new Map();
+
+  // Предзаполнение
+  try {
+    topicEl.value    = localStorage.getItem('disp.topic') || '';
+    groupKeyEl.value = localStorage.getItem('disp.key')   || '';
+    brokerEl.value   = localStorage.getItem('disp.broker')|| 'auto';
+  } catch {}
+  try {
+    const savedBase = localStorage.getItem(LS_BASEMAP);
+    if (savedBase && BASE_MAPS[savedBase]) {
+      currentBaseKey = savedBase;
+      baseMapSel.value   = savedBase;
+      baseMapFloat.value = savedBase;
+    }
+  } catch {}
+
+  // --------- Утилиты ---------
+  function humanAgo(ts) {
+    const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 5)     return 'только что';
+    if (s < 60)    return s + ' сек назад';
+    if (s < 3600)  return Math.round(s / 60) + ' мин назад';
+    if (s < 86400) return Math.round(s / 3600) + ' ч назад';
+    return new Date(ts).toLocaleString('ru-RU');
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function sanitize(s) {
+    return String(s || '').trim().replace(/[^a-zA-Z0-9_\-]/g, '-').slice(0, 64);
+  }
+
+  // --------- Карта ---------
+  function setBaseLayer(key) {
+    if (!map) return;
+    if (!BASE_MAPS[key]) key = 'positron';
+    if (currentBaseLayer) map.removeLayer(currentBaseLayer);
+    currentBaseLayer = BASE_MAPS[key].make();
+    currentBaseLayer.addTo(map);
+    currentBaseKey = key;
+    baseMapSel.value   = key;
+    baseMapFloat.value = key;
+    try { localStorage.setItem(LS_BASEMAP, key); } catch {}
+  }
+
+  function initMap() {
+    if (map) return;
+    map = L.map('map', { zoomControl: true, layers: [] })
+          .setView([55.751244, 37.618423], 10);
+    setBaseLayer(currentBaseKey);
+
+    const leafletBase = {};
+    Object.keys(BASE_MAPS).forEach(k => {
+      leafletBase[BASE_MAPS[k].name] = BASE_MAPS[k].make();
+    });
+    L.control.layers(leafletBase, null,
+      { position: 'topleft', collapsed: true }).addTo(map);
+
+    map.on('baselayerchange', (e) => {
+      const key = Object.keys(BASE_MAPS).find(k => BASE_MAPS[k].name === e.name);
+      if (key && key !== currentBaseKey) {
+        if (currentBaseLayer) map.removeLayer(currentBaseLayer);
+        if (leafletBase[e.name]) map.removeLayer(leafletBase[e.name]);
+        currentBaseLayer = BASE_MAPS[key].make();
+        currentBaseLayer.addTo(map);
+        currentBaseKey = key;
+        baseMapSel.value    = key;
+        baseMapFloat.value  = key;
+        try { localStorage.setItem(LS_BASEMAP, key); } catch {}
+      }
+    });
+  }
+
+  function makeIcon(online) {
+    const color = online ? '#22c55e' : '#9ca3af';
+    const glow  = online ? ',0 0 12px rgba(34,197,94,.85)' : '';
+    return L.divIcon({
+      className: '',
+      html: `<div style="width:20px;height:20px;border-radius:50%;
+                background:${color};border:3px solid #fff;
+                box-shadow:0 0 6px rgba(0,0,0,.55)${glow};"></div>`,
+      iconSize:[20,20], iconAnchor:[10,10], popupAnchor:[0,-12]
+    });
+  }
+
+  function labelHtml(d) {
+    const time = new Date(d.lastSeen).toLocaleTimeString('ru-RU',
+      { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const ago = humanAgo(d.lastSeen)
+      .replace(' секунд назад',' с').replace(' сек назад',' с')
+      .replace(' минут назад',' мин').replace(' мин назад',' мин')
+      .replace(' час назад',' ч').replace(' часа назад',' ч')
+      .replace(' часов назад',' ч').replace('только что','сейчас');
+    return `<span>${esc(d.name || 'Агент')}</span>` +
+           `<span class="label-time">${time} · ${ago}</span>`;
+  }
+
+  function applyLabel(entry) {
+    const d = entry.data;
+    if (!entry.marker) return;
+    const cls  = 'driver-label ' + (d.online ? 'is-online' : 'is-offline');
+    const html = labelHtml(d);
+
+    if (!entry.marker.getTooltip()) {
+      entry.marker.bindTooltip(html, {
+        permanent: true, direction: 'bottom', offset: [0, 10],
+        className: cls, opacity: 1
+      });
+      entry.marker.getTooltip().on('click', () => openDriver(d.id));
+    } else {
+      const tip = entry.marker.getTooltip();
+      tip.setContent(html);
+      if (tip._container) {
+        tip._container.className =
+          'leaflet-tooltip ' + cls + ' leaflet-zoom-animated';
+      }
+    }
+  }
+
+  function popupHtml(d) {
+    const status = d.online
+      ? '<span style="color:#0a5c2e">🟢 онлайн</span>'
+      : '<span style="color:#888">⚪ офлайн</span>';
+    const gmap = `https://www.google.com/maps?q=${d.lat},${d.lng}`;
+    const time = new Date(d.lastSeen).toLocaleTimeString('ru-RU');
+    return `
+      <div style="font-size:13px;line-height:1.55;min-width:180px">
+        <b>${esc(d.name || 'Агент')}</b><br>
+        ${d.car ? esc(d.car) + '<br>' : ''}
+        ${status}<br>
+        <span style="font-family:ui-monospace,monospace;font-size:12px">
+          ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}
+        </span><br>
+        <small style="color:#888">Обновлено в ${time} (${humanAgo(d.lastSeen)})</small><br>
+        <a href="${gmap}" target="_blank" rel="noopener">Открыть в Google Maps →</a>
+      </div>`;
+  }
+
+  function upsertMarker(entry) {
+    const d = entry.data;
+    if (d.lat == null || d.lng == null) return;
+    const ll = [d.lat, d.lng];
+
+    if (!entry.marker) {
+      entry.marker = L.marker(ll, { icon: makeIcon(d.online) }).addTo(map);
+      entry.marker.on('click', () => openDriver(d.id));
+    } else {
+      entry.marker.setLatLng(ll);
+      entry.marker.setIcon(makeIcon(d.online));
+    }
+    entry.marker.bindPopup(popupHtml(d));
+    applyLabel(entry);
+
+    if (!didInitialCenter) {
+      map.setView(ll, 13);
+      didInitialCenter = true;
+    }
+  }
+
+  function renderPanel() {
+    const arr = [...drivers.values()].sort((a,b) => {
+      if (a.data.online !== b.data.online) return a.data.online ? -1 : 1;
+      return b.data.lastSeen - a.data.lastSeen;
+    });
+
+    if (!arr.length) {
+      listEl.innerHTML =
+        '<div id="empty">Пока никто не передаёт координаты.<br><br>' +
+        'Агент должен ввести тот же код и ключ группы и нажать «▶ Начать передачу».</div>';
+      return;
+    }
+
+    listEl.innerHTML = arr.map(e => {
+      const d = e.data;
+      const gmap = `https://www.google.com/maps?q=${d.lat},${d.lng}`;
+      const time = new Date(d.lastSeen).toLocaleTimeString('ru-RU');
+      return `
+        <div class="driver ${d.online ? 'on' : ''}" data-id="${esc(d.id)}">
+          <div class="top">
+            <span class="dot"></span>
+            <span class="name">${esc(d.name || 'Агент')}</span>
+          </div>
+          ${d.car ? `<div class="meta">🚗 ${esc(d.car)}</div>` : ''}
+          <div class="coord">${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}</div>
+          <div class="ago">${d.online ? 'онлайн' : 'офлайн'} · ${time} · ${humanAgo(d.lastSeen)}</div>
+          <a class="gmap" href="${gmap}" target="_blank" rel="noopener"
+             onclick="event.stopPropagation()">Google Maps →</a>
+        </div>`;
+    }).join('');
+  }
+
+  function openDriver(id) {
+    const e = drivers.get(id);
+    if (!e || !e.marker) return;
+    map.setView(e.marker.getLatLng(), 15);
+    e.marker.openPopup();
+    if (window.innerWidth < 768) sidebar.classList.remove('open');
+  }
+
+  listEl.addEventListener('click', ev => {
+    const row = ev.target.closest('.driver');
+    if (row) openDriver(row.dataset.id);
+  });
+
+  async function handleMessage(msg) {
+    let p;
+    try {
+      const packed = new TextDecoder().decode(msg.payload);
+      if (!packed) return;
+      p = await decryptPayload(cryptoKey, packed);
+    } catch (e) {
+      // Чужое сообщение в топик (или с другим ключом) — молча игнорируем
+      return;
+    }
+    if (!p || !p.id) return;
+
+    const driverId = p.id;
+    let entry = drivers.get(driverId);
+    if (!entry) {
+      entry = { data: { id: driverId }, marker: null };
+      drivers.set(driverId, entry);
+    }
+    const d = entry.data;
+
+    const ts = p.ts && Math.abs(p.ts - Date.now()) < 6e5 ? p.ts : Date.now();
+
+    if (p.event === 'offline' || p.event === 'stop') {
+      d.online = false;
+      d.lastSeen = ts;
+    } else {
+      if (p.lat      != null) d.lat      = p.lat;
+      if (p.lng      != null) d.lng      = p.lng;
+      if (p.accuracy != null) d.accuracy = p.accuracy;
+      if (p.speed    != null) d.speed    = p.speed;
+      if (p.heading  != null) d.heading  = p.heading;
+      if (p.name)             d.name     = p.name;
+      if (p.car      != null) d.car      = p.car;
+      d.lastSeen = ts;
+      d.online   = (Date.now() - d.lastSeen) < OFFLINE_AFTER;
+    }
+
+    if (d.lat != null) upsertMarker(entry);
+    renderPanel();
+  }
+
+  function setConn(cls, text) {
+    connEl.className = cls;
+    connEl.textContent = text;
+  }
+
+  setInterval(() => {
+    if (!baseTopic) return;
+    const now = Date.now();
+    for (const e of drivers.values()) {
+      const shouldBeOnline = (now - e.data.lastSeen) < OFFLINE_AFTER;
+      if (e.data.online !== shouldBeOnline) {
+        e.data.online = shouldBeOnline;
+        if (e.marker) {
+          e.marker.setIcon(makeIcon(e.data.online));
+          e.marker.setPopupContent(popupHtml(e.data));
+        }
+      }
+      applyLabel(e);
+    }
+    renderPanel();
+  }, 5000);
+
+  // --------- Кнопки ---------
+  $('fit').addEventListener('click', () => {
+    const pts = [...drivers.values()]
+      .filter(e => e.data.lat != null)
+      .map(e => [e.data.lat, e.data.lng]);
+    if (!pts.length) return;
+    map.fitBounds(L.latLngBounds(pts).pad(0.2));
+  });
+
+  $('change').addEventListener('click', () => {
+    if (client) { try { client.end(true); } catch {} client = null; }
+    baseTopic = '';
+    cryptoKey = null;
+    drivers.clear();
+    if (map) { map.remove(); map = null; currentBaseLayer = null; }
+    appEl.classList.remove('visible');
+    setupEl.style.display = 'flex';
+    didInitialCenter = false;
+    connectBtn.disabled = false;
+    topicEl.focus();
+  });
+
+  $('toggle').addEventListener('click', () => sidebar.classList.toggle('open'));
+  $('close').addEventListener('click',  () => sidebar.classList.remove('open'));
+
+  baseMapSel.addEventListener('change',   () => setBaseLayer(baseMapSel.value));
+  baseMapFloat.addEventListener('change', () => setBaseLayer(baseMapFloat.value));
+
+  connectBtn.addEventListener('click', connect);
+  topicEl.addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+  groupKeyEl.addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+
+  // --------- MQTT ---------
+  function tryBroker(url, label, onMessage) {
+    return new Promise((resolve, reject) => {
+      const c = mqtt.connect(url, {
+        clientId: 'n-' + Math.random().toString(16).slice(2, 10),
+        clean: true, keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000
+      });
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          try { c.end(true); } catch {}
+          reject(new Error('timeout ' + label));
+        }
+      }, 11000);
+
+      c.on('connect', () => {
+        clearTimeout(timeout);
+        if (!resolved) { resolved = true; resolve(c); }
+      });
+      c.on('error', (err) => {
+        if (!resolved) {
+          clearTimeout(timeout);
+          resolved = true;
+          try { c.end(true); } catch {}
+          reject(err);
+        }
+      });
+    });
+  }
+
+  async function connectAnyBroker() {
+    let list;
+    const manual = brokerEl.value;
+    if (manual && manual !== 'auto') {
+      list = [['wss://' + manual, manual]];
+    } else {
+      list = [
+        ['wss://broker.emqx.io:8084/mqtt',     'broker.emqx.io'],
+        ['wss://broker.hivemq.com:8884/mqtt',  'broker.hivemq.com'],
+        ['wss://test.mosquitto.org:8081/mqtt', 'test.mosquitto.org']
+      ];
+    }
+    let lastErr = null;
+    for (const [url, label] of list) {
+      try { return await tryBroker(url, label); }
+      catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error('no broker');
+  }
+
+  // --------- Подключение ---------
+  async function connect() {
+    const code = sanitize(topicEl.value);
+    const key  = groupKeyEl.value.trim();
+
+    if (!code) { topicEl.focus(); topicEl.style.borderColor = '#dc3545'; return; }
+    if (!key)  { groupKeyEl.focus(); groupKeyEl.style.borderColor = '#dc3545'; return; }
+
+    if (!window.crypto || !crypto.subtle) {
+      alert('Криптография недоступна. Откройте страницу по HTTPS.');
+      return;
+    }
+
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Крипто-подготовка…';
+
+    currentBaseKey = baseMapSel.value || 'positron';
+    try { localStorage.setItem(LS_BASEMAP, currentBaseKey); } catch {}
+
+    try {
+      await Promise.all([loadScriptAny(MQTT_CDNS), loadScriptAny(LEAFLET_CDNS)]);
+    } catch (e) {
+      alert('Не удалось загрузить библиотеки с CDN.');
+      connectBtn.disabled = false;
+      connectBtn.textContent = 'Подключиться';
+      return;
+    }
+
+    try {
+      localStorage.setItem('disp.topic',  topicEl.value.trim());
+      localStorage.setItem('disp.key',    key);
+      localStorage.setItem('disp.broker', brokerEl.value);
+    } catch {}
+
+    try {
+      const roomHash = await deriveRoomHash(code, key);
+      cryptoKey      = await deriveCryptoKey(code, key);
+      baseTopic      = TOPIC_PREFIX + '/' + roomHash;
+    } catch (e) {
+      alert('Ошибка криптографии: ' + e.message);
+      connectBtn.disabled = false;
+      connectBtn.textContent = 'Подключиться';
+      return;
+    }
+
+    setupEl.style.display = 'none';
+    appEl.classList.add('visible');
+
+    await new Promise(r => setTimeout(r, 50));
+    initMap();
+    map.invalidateSize();
+
+    drivers.clear();
+    didInitialCenter = false;
+    renderPanel();
+
+    connectBtn.textContent = 'Подключиться';
+    connectBtn.disabled = false;
+
+    setConn('', 'подключение…');
+    try {
+      client = await connectAnyBroker();
+    } catch (e) {
+      setConn('err', 'нет связи');
+      alert('Не удалось подключиться к серверу связи.');
+      return;
+    }
+
+    client.on('connect', () => {
+      setConn('on', 'онлайн');
+      client.subscribe(baseTopic + '/+', { qos: 1 }, (err) => {
+        if (err) setConn('err', 'ошибка подписки');
+      });
+    });
+
+    client.on('message', (topic, payload) => handleMessage({ topic, payload }));
+    client.on('reconnect', () => setConn('', 'переподключение…'));
+    client.on('close',     () => setConn('err', 'нет связи'));
+    client.on('error',     () => setConn('err', 'ошибка'));
+  }
+})();
+</script>
+</body>
+</html>
