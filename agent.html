@@ -273,7 +273,7 @@ async function encryptPayload(key, obj) {
     log('❌ HTTP без HTTPS — браузер заблокирует и GPS, и криптографию.', 'fail');
   }
 
-  // --------- Предзаполнение (без URL!) ---------
+  // --------- Предзаполнение ---------
   try {
     nameEl.value     = localStorage.getItem('agent.name')  || '';
     carEl.value      = localStorage.getItem('agent.car')   || '';
@@ -459,7 +459,7 @@ async function encryptPayload(key, obj) {
   }
 
   // ============================================================
-  //  MQTT — перебор брокеров
+  //  MQTT
   // ============================================================
   function tryBroker(url, label, willPayload) {
     return new Promise((resolve, reject) => {
@@ -570,7 +570,8 @@ async function encryptPayload(key, obj) {
       const driverId = getDriverId();
       pubTopic       = TOPIC_PREFIX + '/' + roomHash + '/' + driverId;
       log('✅ Крипто-параметры вычислены за ' + (Date.now() - t0) + ' мс', 'ok');
-      log('Топик: ' + pubTopic.slice(0, 40) + '…', 'info');
+      log('Хеш группы: ' + roomHash, 'info');
+      log('Топик: ' + pubTopic, 'info');
     } catch (e) {
       log('❌ Крипто: ' + e.message, 'fail');
       setStatus('❌ Не удалось подготовить шифрование.', 'err');
@@ -594,7 +595,7 @@ async function encryptPayload(key, obj) {
       return;
     }
 
-    // --- Шифруем LWT заранее
+    // --- Шифруем LWT
     let willPayload;
     try {
       willPayload = await encryptPayload(cryptoKey, {
