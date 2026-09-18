@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>НЕБУШКО — карта агентов</title>
 
+<!-- ===================== PWA ===================== -->
+<link rel="manifest" href="./manifest-dispatcher.json">
+<meta name="theme-color" content="#0b1220">
+<meta name="color-scheme" content="dark light">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="НЕБУШКО">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">
+<script src="./pwa.js" defer></script>
+<!-- =============================================== -->
+      
 <link rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
@@ -808,19 +822,7 @@ async function decryptPayload(key, b64url) {
   connectBtn.addEventListener('click', connect);
   topicEl.addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
   groupKeyEl.addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
-<!-- ===================== PWA ===================== -->
-<link rel="manifest" href="./manifest-dispatcher.json">
-<meta name="theme-color" content="#0b1220">
-<meta name="color-scheme" content="dark light">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="НЕБУШКО">
-<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png">
-<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">
-<script src="./pwa.js" defer></script>
-<!-- =============================================== -->
+
   // --------- MQTT ---------
   function tryBroker(url, label) {
     return new Promise((resolve, reject) => {
