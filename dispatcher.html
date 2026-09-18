@@ -38,6 +38,7 @@ html, body {
   position: fixed; inset: 0; z-index: 50;
   display: flex; align-items: center; justify-content: center;
   background: #0b1220; padding: 16px;
+  overflow-y: auto;
 }
 #login.hidden { display: none; }
 #login .card {
@@ -154,7 +155,7 @@ html, body {
   #sidebar.open { transform: translateX(0); }
 }
 
-/* ---- Дамми-модалка с диагностикой ---- */
+/* ---- Модалка диагностики ---- */
 .modal {
   position: fixed; inset: 0; z-index: 999998;
   background: rgba(0,0,0,.55); display: flex; align-items: flex-end;
@@ -289,7 +290,7 @@ var state = {
   topicPrefix: null, cryptoKey: null,
   client: null, connected: false,
   map: null, tileLayer: null,
-  agents: {},            // id -> { id, name, car, lat, lng, acc, spd, lastSeen, marker, tooltip, online }
+  agents: {},            // id -> { ... , marker, tooltip, online }
   tickTimer: null
 };
 
@@ -344,10 +345,9 @@ async function encryptPayload(obj){
   out.set(iv, 0); out.set(new Uint8Array(ct), iv.length);
   return b64u(out);
 }
+/* ВАЖНО: payload от MQTT.js приходит как Buffer/Uint8Array с UTF-8 байтами
+   base64url-строки. Сначала декодируем в строку, потом base64url → bytes. */
 async function decryptPayload(payload){
-  // MQTT.js отдаёт payload как Buffer/Uint8Array.
-  // Если publish был строкой — внутри лежат UTF-8 байты base64url-строки.
-  // Сначала приводим к строке, потом декодируем base64url.
   var str;
   if (typeof payload === 'string') {
     str = payload;
@@ -390,6 +390,7 @@ function tryConnect(url){
 }
 async function connectAnyBroker(){
   var list = brokerList();
+  var lastErr = null;
   for (var i=0;i<list.length;i++){
     try {
       dlog('Попытка: ' + list[i], 'i');
@@ -397,10 +398,11 @@ async function connectAnyBroker(){
       dlog('✅ Подключено: ' + r.url, 'i');
       return r.client;
     } catch (e) {
+      lastErr = e;
       dlog('✗ ' + list[i] + ' — ' + (e.message || e), 'w');
     }
   }
-  throw new Error('Все брокеры недоступны');
+  throw lastErr || new Error('Все брокеры недоступны');
 }
 
 /* ---------------- стили карт ---------------- */
@@ -472,25 +474,22 @@ function upsertMarker(a){
       html: html, className: '', iconSize: [18,18], iconAnchor: [9,9]
     });
     a.marker = L.marker(ll, { icon: icon }).addTo(state.map);
-    a.tooltip = L.tooltip({
+    a.marker.bindTooltip('', {
       permanent: true, direction: 'bottom', offset: [0, 6],
       className: 'agent-label', interactive: false
     });
-    a.marker.bindTooltip(a.tooltip);
     a.marker.bindPopup(buildPopup(a), { offset: [0, -8] });
     a.marker.on('popupopen', function(){ a.marker.setPopupContent(buildPopup(a)); });
   } else {
     a.marker.setLatLng(ll);
   }
 
-  // tooltip текст
   var ago = humanAgo(a.lastSeen);
   a.marker.getTooltip().setContent(
     '<b>' + escHtml(a.name || a.id) + '</b><br>' +
     fmtTime(a.lastSeen) + ' · ' + ago
   );
 
-  // класс online/offline на иконке
   var wrap = a.marker.getElement();
   if (wrap){
     var inner = wrap.querySelector('.agent-marker');
@@ -569,7 +568,7 @@ function recomputeOnline(){
 /* ---------------- обработка входящих ---------------- */
 function setupMessageHandler(){
   state.client.on('message', async function(topic, payload){
-    // фичи (агенты-видят-друг-друга и сообщения)
+    // фичи (видимость агентов и сообщения) — если обработали, выходим
     if (window.RotaFeatures && await RotaFeatures.handleMessage(topic, payload)) return;
 
     if (topic.indexOf(state.topicPrefix + '/') !== 0) return;
@@ -578,7 +577,7 @@ function setupMessageHandler(){
 
     var obj = null;
     try { obj = await decryptPayload(payload); }
-    catch(e){ dlog('Не удалось расшифровать от ' + suffix, 'w'); return; }
+    catch(e){ dlog('Не удалось расшифровать от ' + suffix + ': ' + (e.message || e), 'w'); return; }
     if (!obj || typeof obj !== 'object') return;
 
     if (obj.t === 'off'){
@@ -702,22 +701,18 @@ async function doConnect(){
     renderSidebar();
   }, 5000);
 
-  // показать FAB-лог на телефоне
   document.getElementById('fab-log').classList.remove('hidden');
 
-  // диагностика
   dlog('secure context: ' + window.isSecureContext, 'i');
   dlog('crypto.subtle: ' + !!(window.crypto && crypto.subtle), 'i');
 }
 
 /* ---------------- init ---------------- */
 (function init(){
-  // заголовок для мобильного
   if (window.matchMedia('(max-width:820px)').matches){
     document.getElementById('btn-close').style.display = '';
   }
 
-  // восстановить поля логина
   document.getElementById('in-topic').value  = lsGet('disp.topic', '');
   document.getElementById('in-key').value    = lsGet('disp.key', '');
   document.getElementById('in-broker').value = lsGet('disp.broker', 'auto');
@@ -725,7 +720,6 @@ async function doConnect(){
   document.getElementById('in-map').value = state.mapStyle;
 
   document.getElementById('btn-connect').addEventListener('click', doConnect);
-
   document.getElementById('btn-all').addEventListener('click', fitAll);
   document.getElementById('btn-group').addEventListener('click', openGroupModal);
 
@@ -735,7 +729,6 @@ async function doConnect(){
     else location.reload();
   });
 
-  // тап по заголовку на мобильном — открыть/закрыть сайдбар
   document.querySelector('#header .title').addEventListener('click', function(){
     if (window.matchMedia('(max-width:820px)').matches){
       sidebar.classList.toggle('open');
