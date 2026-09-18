@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="theme-color" content="#1a1a1a">
 <title>АГЕНТ — передача геолокации</title>
+
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+      onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
+
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -38,6 +43,40 @@
          background:#9aa; margin-right:8px; vertical-align:middle; }
   .dot.on  { background:#22c55e; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  /* Карта агента */
+  #myMap {
+    height: 260px; border-radius: 12px; overflow: hidden;
+    margin: 10px 0 6px; background: #e5e7eb;
+  }
+  .map-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .map-row select {
+    flex: 1; margin-bottom: 0; padding: 8px 10px; font-size: 13px;
+  }
+  .map-row button {
+    flex: 0 0 auto; width: auto; padding: 8px 12px; font-size: 13px;
+    font-weight: 500; background: #eef3f8; color: #1a1a1a;
+  }
+  .map-row button:active { transform: scale(.96); }
+
+  /* Маркер агента */
+  .agent-marker-icon {
+    background: transparent; border: none;
+  }
+  .agent-marker-icon .pin {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #1a1a1a;
+    border: 4px solid #fff;
+    box-shadow: 0 0 12px rgba(0,0,0,.55), 0 0 0 2px rgba(26,26,26,.25);
+  }
+  .agent-marker-icon .pin.pulse {
+    animation: agentPulse 1.6s infinite;
+  }
+  @keyframes agentPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(26,26,26,.55), 0 0 0 2px rgba(26,26,26,.25); }
+    70%  { box-shadow: 0 0 0 18px rgba(26,26,26,0), 0 0 0 2px rgba(26,26,26,.25); }
+    100% { box-shadow: 0 0 0 0 rgba(26,26,26,0), 0 0 0 2px rgba(26,26,26,.25); }
+  }
 
   #diag { background:#1a1a1a; color:#d0d0d0; font-family: ui-monospace, Menlo, monospace;
           font-size: 11px; padding: 10px; border-radius: 10px; margin-top: 8px;
@@ -97,6 +136,16 @@
         <option value="test.mosquitto.org:8081/mqtt">test.mosquitto.org</option>
       </select>
       <div class="small">Если не подключается — попробуйте вручную.</div>
+
+      <label for="baseMap" style="margin-top:12px">Стиль карты</label>
+      <select id="baseMap">
+        <option value="positron">🌍 Positron (светлая)</option>
+        <option value="hot">🛣 OSM HOT</option>
+        <option value="de">🇩🇪 OSM DE</option>
+        <option value="esri">🏙 Esri World Street</option>
+        <option value="topo">⛰ OpenTopoMap</option>
+        <option value="sat">🛰 Спутник (Esri)</option>
+      </select>
     </details>
 
     <button class="ghost" id="diagToggle">🩺 Показать диагностику</button>
@@ -108,6 +157,22 @@
     <div class="status" id="status"><span class="dot"></span>Инициализация…</div>
     <div class="coords" id="coords">—</div>
     <div class="small" id="meta"></div>
+
+    <!-- МИНИ-КАРТА АГЕНТА -->
+    <div class="map-row">
+      <select id="mapStyleInline" title="Стиль карты">
+        <option value="positron">🌍 Positron</option>
+        <option value="hot">🛣 OSM HOT</option>
+        <option value="de">🇩🇪 OSM DE</option>
+        <option value="esri">🏙 Esri Street</option>
+        <option value="topo">⛰ Топо</option>
+        <option value="sat">🛰 Спутник</option>
+      </select>
+      <button id="centerMe" type="button" title="Центрировать карту на мне">🎯 Найти меня</button>
+    </div>
+    <div id="myMap"></div>
+    <div class="small" id="mapInfo">Ожидание первой точки GPS…</div>
+
     <button id="stop" class="stop hidden" style="margin-top:14px">⏹ Остановить передачу</button>
     <button class="ghost" id="diagToggle2">🩺 Диагностика</button>
     <div id="diag2" class="hidden" style="background:#1a1a1a;color:#d0d0d0;
@@ -161,6 +226,55 @@ const MQTT_CDNS = [
   'https://cdn.jsdelivr.net/npm/mqtt@5.3.5/dist/mqtt.min.js',
   'https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js'
 ];
+const LEAFLET_CDNS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+  'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+];
+
+// ============================================================
+//  БАЗОВЫЕ КАРТЫ
+// ============================================================
+const BASE_MAPS = {
+  positron: {
+    name: '🌍 Positron',
+    make: () => L.tileLayer('https://tiles.openfreemap.org/styles/positron/{z}/{x}/{y}.png', {
+      maxZoom: 20, attribution: '© OpenStreetMap, © OpenFreeMap'
+    })
+  },
+  hot: {
+    name: '🛣 OSM HOT',
+    make: () => L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+      subdomains: 'abc', maxZoom: 19, attribution: '© OpenStreetMap, HOT'
+    })
+  },
+  de: {
+    name: '🇩🇪 OSM DE',
+    make: () => L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap'
+    })
+  },
+  esri: {
+    name: '🏙 Esri Street',
+    make: () => L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19, attribution: 'Tiles © Esri' }
+    )
+  },
+  topo: {
+    name: '⛰ Топо',
+    make: () => L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      subdomains: 'abc', maxZoom: 17, attribution: '© OpenStreetMap, SRTM | © OpenTopoMap'
+    })
+  },
+  sat: {
+    name: '🛰 Спутник',
+    make: () => L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' }
+    )
+  }
+};
 
 // ============================================================
 //  КРИПТО
@@ -170,14 +284,6 @@ function bytesToB64url(bytes) {
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
   return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function b64urlToBytes(s) {
-  const b64 = s.replace(/-/g,'+').replace(/_/g,'/');
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 async function deriveRoomHash(groupCode, groupKey) {
   const data = new TextEncoder().encode(groupCode + ':' + groupKey + ':v1');
   const hash = await crypto.subtle.digest('SHA-256', data);
@@ -185,29 +291,18 @@ async function deriveRoomHash(groupCode, groupKey) {
     .map(b => b.toString(16).padStart(2, '0')).join('');
   return hex.slice(0, 24);
 }
-
 async function deriveCryptoKey(groupCode, groupKey) {
   const base = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(groupCode + ':' + groupKey + ':enc'),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveKey']
+    { name: 'PBKDF2' }, false, ['deriveKey']
   );
   return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: new TextEncoder().encode('rotacol-salt-v1'),
-      iterations: 100000,
-      hash: 'SHA-256'
-    },
-    base,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
+    { name: 'PBKDF2', salt: new TextEncoder().encode('rotacol-salt-v1'),
+      iterations: 100000, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
   );
 }
-
 async function encryptPayload(key, obj) {
   const iv  = crypto.getRandomValues(new Uint8Array(12));
   const buf = new TextEncoder().encode(JSON.stringify(obj));
@@ -224,6 +319,7 @@ async function encryptPayload(key, obj) {
 (function () {
   const HEARTBEAT_MS  = 20000;
   const TOPIC_PREFIX  = 'rotacol-v1';
+  const LS_AGENT_MAP  = 'agent.baseMap';
 
   const $ = id => document.getElementById(id);
   const permCard  = $('permissionCard');
@@ -240,11 +336,16 @@ async function encryptPayload(key, obj) {
   const topicEl    = $('topic');
   const groupKeyEl = $('groupkey');
   const brokerEl   = $('broker');
+  const baseMapSel = $('baseMap');
+  const mapStyleInline = $('mapStyleInline');
+  const centerBtn  = $('centerMe');
   const startBtn   = $('start');
   const stopBtn    = $('stop');
   const statusEl   = $('status');
   const coordsEl   = $('coords');
   const metaEl     = $('meta');
+  const mapInfoEl  = $('mapInfo');
+  const mapContainer = $('myMap');
 
   let client = null;
   let cryptoKey = null;
@@ -252,6 +353,15 @@ async function encryptPayload(key, obj) {
   let lastSend = 0, lastCoords = null, wakeLock = null;
   let pubTopic = '';
   let permissionGranted = false;
+
+  // Карта
+  let map = null;
+  let myMarker = null;
+  let accuracyCircle = null;
+  let currentBaseLayer = null;
+  let currentBaseKey = 'positron';
+  let mapInitialized = false;
+  let firstFix = true;
 
   // --------- Стартовая диагностика ---------
   log('=== ДИАГНОСТИКА ОКРУЖЕНИЯ ===', 'info');
@@ -263,7 +373,6 @@ async function encryptPayload(key, obj) {
       navigator.geolocation ? 'ok' : 'fail');
   log('crypto.subtle: ' + (window.crypto && crypto.subtle ? 'есть' : 'НЕТ'),
       (window.crypto && crypto.subtle) ? 'ok' : 'fail');
-  log('wakeLock: ' + ('wakeLock' in navigator ? 'есть' : 'нет'), 'info');
 
   if (location.protocol === 'file:' || location.protocol === 'content:') {
     log('❌ Страница открыта как ' + location.protocol +
@@ -281,6 +390,14 @@ async function encryptPayload(key, obj) {
     groupKeyEl.value = localStorage.getItem('agent.key')   || '';
     brokerEl.value   = localStorage.getItem('agent.broker')|| 'auto';
   } catch (e) {}
+  try {
+    const savedMap = localStorage.getItem(LS_AGENT_MAP);
+    if (savedMap && BASE_MAPS[savedMap]) {
+      currentBaseKey = savedMap;
+      baseMapSel.value       = savedMap;
+      mapStyleInline.value   = savedMap;
+    }
+  } catch {}
 
   // --------- Диагностика ---------
   $('diagToggle').addEventListener('click', () => $('diag').classList.toggle('hidden'));
@@ -383,6 +500,120 @@ async function encryptPayload(key, obj) {
   checkExistingPermission();
 
   // ============================================================
+  //  КАРТА АГЕНТА
+  // ============================================================
+  function setBaseLayer(key) {
+    if (!map) return;
+    if (!BASE_MAPS[key]) key = 'positron';
+    if (currentBaseLayer) map.removeLayer(currentBaseLayer);
+    currentBaseLayer = BASE_MAPS[key].make();
+    currentBaseLayer.addTo(map);
+    currentBaseKey = key;
+    baseMapSel.value     = key;
+    mapStyleInline.value = key;
+    try { localStorage.setItem(LS_AGENT_MAP, key); } catch {}
+  }
+
+  function agentIcon(pulse) {
+    return L.divIcon({
+      className: 'agent-marker-icon',
+      html: `<div class="pin${pulse ? ' pulse' : ''}"></div>`,
+      iconSize:   [22, 22],
+      iconAnchor: [11, 11]
+    });
+  }
+
+  function initAgentMap() {
+    if (mapInitialized || !window.L) return;
+    mapInitialized = true;
+
+    map = L.map('myMap', {
+      zoomControl: true,
+      attributionControl: true
+    }).setView([55.751244, 37.618423], 12);
+
+    setBaseLayer(currentBaseKey);
+
+    // Пустая подсказка, пока нет точки
+    mapInfoEl.textContent = 'Ожидание первой точки GPS…';
+  }
+
+  function updateAgentMap(c) {
+    if (!map) return;
+    const lat = c.latitude;
+    const lng = c.longitude;
+    const ll  = [lat, lng];
+
+    // Маркер
+    if (!myMarker) {
+      myMarker = L.marker(ll, {
+        icon: agentIcon(true),
+        zIndexOffset: 1000,
+        interactive: false
+      }).addTo(map);
+    } else {
+      myMarker.setLatLng(ll);
+    }
+
+    // Кружок точности
+    if (!accuracyCircle) {
+      accuracyCircle = L.circle(ll, {
+        radius: c.accuracy || 0,
+        color: '#1a1a1a',
+        weight: 1,
+        opacity: 0.5,
+        fillColor: '#1a1a1a',
+        fillOpacity: 0.08,
+        interactive: false
+      }).addTo(map);
+    } else {
+      accuracyCircle.setLatLng(ll);
+      accuracyCircle.setRadius(c.accuracy || 0);
+    }
+
+    // Первый раз центрируем карту на агента
+    if (firstFix) {
+      firstFix = false;
+      map.setView(ll, 16);
+      mapInfoEl.textContent = 'Точка определена. Карта следует за вами.';
+    }
+
+    // Обновляем инфо-строку
+    const acc = Math.round(c.accuracy || 0);
+    const speed = (c.speed != null && !isNaN(c.speed))
+      ? (c.speed * 3.6).toFixed(1) + ' км/ч'
+      : '—';
+    mapInfoEl.innerHTML =
+      `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} · ` +
+      `точность ±${acc} м · скорость ${speed}`;
+  }
+
+  centerBtn.addEventListener('click', () => {
+    if (!map || !lastCoords) {
+      mapInfoEl.textContent = 'Пока нет координат — нечего центрировать.';
+      return;
+    }
+    map.setView([lastCoords.latitude, lastCoords.longitude], 16);
+    mapInfoEl.textContent = 'Карта центрирована на вас.';
+    setTimeout(() => {
+      if (!lastCoords) return;
+      const c = lastCoords;
+      mapInfoEl.innerHTML =
+        `📍 ${c.latitude.toFixed(5)}, ${c.longitude.toFixed(5)} · ` +
+        `точность ±${Math.round(c.accuracy || 0)} м`;
+    }, 1200);
+  });
+
+  baseMapSel.addEventListener('change', () => {
+    currentBaseKey = baseMapSel.value;
+    if (mapInitialized) setBaseLayer(currentBaseKey);
+  });
+  mapStyleInline.addEventListener('change', () => {
+    currentBaseKey = mapStyleInline.value;
+    if (mapInitialized) setBaseLayer(currentBaseKey);
+  });
+
+  // ============================================================
   //  ВСПОМОГАТЕЛЬНЫЕ
   // ============================================================
   function getDriverId() {
@@ -426,9 +657,13 @@ async function encryptPayload(key, obj) {
   function onPosition(pos) {
     const c = pos.coords;
     lastCoords = c;
+
     coordsEl.textContent = c.latitude.toFixed(6) + ', ' + c.longitude.toFixed(6) +
                            '   (±' + Math.round(c.accuracy) + ' м)';
     metaEl.textContent = 'Последняя отправка: ' + new Date().toLocaleTimeString('ru-RU');
+
+    // Обновляем мини-карту
+    updateAgentMap(c);
 
     publish({
       lat: +c.latitude.toFixed(6), lng: +c.longitude.toFixed(6),
@@ -446,6 +681,7 @@ async function encryptPayload(key, obj) {
     const map = { 1: 'Доступ к геолокации запрещён.', 2: 'GPS не определяет позицию.', 3: 'Тайм-аут GPS.' };
     log('Ошибка GPS watchPosition: code=' + err.code, 'fail');
     setStatus('❌ ' + (map[err.code] || err.message), 'err');
+    mapInfoEl.textContent = 'GPS пока не отвечает: ' + (map[err.code] || err.message);
   }
 
   async function requestWakeLock() {
@@ -562,7 +798,7 @@ async function encryptPayload(key, obj) {
     startBtn.disabled = true;
     setStatus('Криптографическая подготовка…');
 
-    // --- Производные от кода+ключа
+    // --- Крипто
     try {
       const t0 = Date.now();
       const roomHash = await deriveRoomHash(code, key);
@@ -581,13 +817,17 @@ async function encryptPayload(key, obj) {
       return;
     }
 
-    // --- Библиотека
-    setStatus('Загрузка MQTT-библиотеки…');
+    // --- Библиотеки: MQTT + Leaflet
+    setStatus('Загрузка библиотек…');
     try {
-      const used = await loadScriptAny(MQTT_CDNS);
-      log('✅ mqtt.js загружен: ' + used, 'ok');
+      const results = await Promise.all([
+        loadScriptAny(MQTT_CDNS),
+        loadScriptAny(LEAFLET_CDNS)
+      ]);
+      log('✅ mqtt.js: ' + results[0], 'ok');
+      log('✅ Leaflet: ' + results[1], 'ok');
     } catch (e) {
-      log('❌ mqtt.js не загрузился ни с одного CDN', 'fail');
+      log('❌ Не удалось загрузить библиотеки', 'fail');
       setStatus('❌ CDN недоступен.', 'err');
       startBtn.disabled = false;
       setupCard.classList.remove('hidden');
@@ -595,7 +835,17 @@ async function encryptPayload(key, obj) {
       return;
     }
 
-    // --- Шифруем LWT
+    // --- Инициализация карты
+    setTimeout(() => {
+      try {
+        initAgentMap();
+        log('✅ Карта инициализирована', 'ok');
+      } catch (e) {
+        log('⚠️ Не удалось инициализировать карту: ' + e.message, 'warn');
+      }
+    }, 50);
+
+    // --- LWT
     let willPayload;
     try {
       willPayload = await encryptPayload(cryptoKey, {
