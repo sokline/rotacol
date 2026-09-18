@@ -224,8 +224,7 @@ function unb64u(str){
   return arr;
 }
 function genAgentId(){
-  var s = Math.random().toString(36).slice(2, 8);
-  return 'a-' + s;
+  return 'a-' + Math.random().toString(36).slice(2, 8);
 }
 function humanAgo(ts){
   if (!ts) return '—';
@@ -260,10 +259,9 @@ async function encryptPayload(obj){
   out.set(iv, 0); out.set(new Uint8Array(ct), iv.length);
   return b64u(out);
 }
+/* ВАЖНО: payload от MQTT.js приходит как Buffer/Uint8Array с UTF-8 байтами
+   base64url-строки. Сначала декодируем в строку, потом base64url → bytes. */
 async function decryptPayload(payload){
-  // MQTT.js отдаёт payload как Buffer/Uint8Array.
-  // Если publish был строкой — внутри лежат UTF-8 байты base64url-строки.
-  // Сначала приводим к строке, потом декодируем base64url.
   var str;
   if (typeof payload === 'string') {
     str = payload;
@@ -290,39 +288,31 @@ function brokerList(){
   if (state.broker && state.broker !== 'auto') return [state.broker];
   return BROKERS.slice();
 }
-async function connectAnyBroker(){
-  var list = brokerList();
-  for (var i=0;i<list.length;i++){
-    var url = list[i];
-    try {
-      dlog('Подключение к ' + url + '…', 'i');
-      var c = await tryConnect(url);
-      return c;
-    } catch (e) {
-      dlog('Не удалось: ' + (e && e.message || e), 'w');
-    }
-  }
-  throw new Error('Все брокеры недоступны');
-}
-function tryConnect(url){
+
+/* Настоящий MQTT Will: брокер сам опубликует зашифрованный "offline" в наш
+   топик, если связь оборвётся аварийно (телефон потерял сеть и т.п.). */
+async function tryConnect(url){
+  var willTopic = state.topicPrefix + '/' + state.id;
+  var willPayload = await encryptPayload({ t:'off', ts: Date.now() });
+
   return new Promise(function(resolve, reject){
-    var willTopic = state.topicPrefix + '/' + state.id;
     var c = mqtt.connect(url, {
       clientId: 'agent-' + state.id + '-' + Math.random().toString(36).slice(2,7),
       clean: true,
       reconnectPeriod: 5000,
       connectTimeout: 8000,
-      keepalive: 30
+      keepalive: 30,
+      will: {
+        topic: willTopic,
+        payload: willPayload,
+        qos: 0,
+        retain: false
+      }
     });
     var to = setTimeout(function(){ try { c.end(true); } catch(e){} reject(new Error('таймаут')); }, 9000);
-    c.once('connect', async function(){
+    c.once('connect', function(){
       clearTimeout(to);
       dlog('✅ Подключено: ' + url, 'i');
-      // установить will (зашифрованный offline)
-      try {
-        var offPayload = await encryptPayload({ t:'off', ts: Date.now() });
-        c.publish(willTopic, offPayload, { qos:0, retain:false });
-      } catch(e){ /* ignore */ }
       resolve(c);
     });
     c.once('error', function(err){
@@ -331,6 +321,22 @@ function tryConnect(url){
       reject(err);
     });
   });
+}
+async function connectAnyBroker(){
+  var list = brokerList();
+  var lastErr = null;
+  for (var i=0;i<list.length;i++){
+    var url = list[i];
+    try {
+      dlog('Подключение к ' + url + '…', 'i');
+      var c = await tryConnect(url);
+      return c;
+    } catch (e) {
+      lastErr = e;
+      dlog('Не удалось: ' + (e && e.message || e), 'w');
+    }
+  }
+  throw lastErr || new Error('Все брокеры недоступны');
 }
 
 /* ---------------- стили карт ---------------- */
@@ -387,7 +393,6 @@ function startWatch(){
   }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
   dlog('watchPosition запущен', 'i');
 }
-
 function stopWatch(){
   if (state.watchId != null) {
     navigator.geolocation.clearWatch(state.watchId);
@@ -395,7 +400,6 @@ function stopWatch(){
   }
   state.watching = false;
 }
-
 function onPosition(pos){
   state.lastLat = pos.coords.latitude;
   state.lastLng = pos.coords.longitude;
@@ -405,7 +409,6 @@ function onPosition(pos){
   updateMiniMarker();
   publishPosition();
 }
-
 function renderCoords(){
   var c = document.getElementById('co-coords');
   var m = document.getElementById('co-meta');
@@ -416,7 +419,6 @@ function renderCoords(){
   var spd = state.lastSpd != null && state.lastSpd >= 0 ? (state.lastSpd * 3.6).toFixed(1) + ' км/ч' : '— км/ч';
   i.textContent = 'Скорость: ' + spd;
 }
-
 function updateMiniMarker(){
   if (!state.map || state.lastLat == null) return;
   var ll = [state.lastLat, state.lastLng];
@@ -536,11 +538,6 @@ async function startTracking(){
   var st = document.getElementById('st-status');
   st.textContent = '✅ Передача активна';
   st.classList.remove('off'); st.classList.add('on');
-
-  // Попросить у диспетчера актуальные настройки группы
-  try {
-    state.client.publish(state.topicPrefix + '/_hello', '1', { qos:0, retain:false });
-  } catch(e){}
 }
 
 function setupClient(){
@@ -560,15 +557,13 @@ function setupClient(){
   c.on('error', function(err){ dlog('MQTT error: ' + (err.message || err), 'e'); });
 
   c.on('message', async function(topic, payload){
-    // сначала пропускаем через features
     if (window.RotaFeatures && await RotaFeatures.handleMessage(topic, payload)) return;
-    // если фича не взяла — нам тут делать нечего
   });
 
   // подписка сразу после подключения
   try { c.subscribe(state.topicPrefix + '/+', { qos:0 }); } catch(e){}
 
-  // сообщить features о подключении
+  // features (видимость агентов, сообщения диспетчера)
   if (window.RotaFeatures) {
     RotaFeatures.attach({
       client:      c,
@@ -584,10 +579,12 @@ function stopTracking(){
   stopWatch();
   stopHeartbeat();
   releaseWakeLock();
+
+  // корректный offline при ручной остановке (не через LWT)
   try {
     if (state.client && state.connected && state.cryptoKey) {
       encryptPayload({ t:'off', ts: Date.now() }).then(function(p){
-        state.client.publish(state.topicPrefix + '/' + state.id, p, { qos:0, retain:false });
+        try { state.client.publish(state.topicPrefix + '/' + state.id, p, { qos:0, retain:false }); } catch(e){}
       });
     }
   } catch(e){}
@@ -606,15 +603,16 @@ function stopTracking(){
 /* ---------------- мини-карта ---------------- */
 function initMiniMap(){
   if (state.map) {
-    // стиль мог поменяться
     applyTileStyle(state.mapStyle);
+    if (window.RotaFeatures && RotaFeatures.redrawOtherAgents) RotaFeatures.redrawOtherAgents();
     return;
   }
   state.map = L.map('minimap', { zoomControl: false, attributionControl: false })
                 .setView([55.75, 37.62], 14);
+  // даём features.js найти карту
+  window.agentMap = state.map;
   applyTileStyle(state.mapStyle);
 
-  // селектор стиля в трекере
   var sel = document.getElementById('map-style-live');
   Object.keys(TILES).forEach(function(k){
     var o = document.createElement('option'); o.value = k; o.textContent = k;
@@ -625,29 +623,16 @@ function initMiniMap(){
     applyTileStyle(sel.value);
     lsSet('agent.baseMap', sel.value);
   });
-}
 
-/* ---------------- beforeunload ---------------- */
-window.addEventListener('beforeunload', function(){
-  try {
-    if (state.client && state.connected && state.cryptoKey){
-      var p = encryptPayload({ t:'off', ts: Date.now() });
-      // синхронно не получится, но publish часто успевает уйти
-      Promise.resolve(p).then(function(payload){
-        state.client.publish(state.topicPrefix + '/' + state.id, payload, { qos:0 });
-      });
-    }
-  } catch(e){}
-});
+  if (window.RotaFeatures && RotaFeatures.redrawOtherAgents) RotaFeatures.redrawOtherAgents();
+}
 
 /* ---------------- init ---------------- */
 (function init(){
-  // ID агента
   state.id = lsGet('agent.id', null);
   if (!state.id) { state.id = genAgentId(); lsSet('agent.id', state.id); }
   dlog('Agent ID: ' + state.id, 'i');
 
-  // восстановить настройки
   document.getElementById('in-name').value    = lsGet('agent.name', '');
   document.getElementById('in-car').value     = lsGet('agent.car', '');
   document.getElementById('in-topic').value   = lsGet('agent.topic', '');
@@ -656,7 +641,6 @@ window.addEventListener('beforeunload', function(){
   state.mapStyle = lsGet('agent.baseMap', 'positron');
   document.getElementById('in-map').value     = state.mapStyle;
 
-  // если разрешение уже дано — сразу на настройки
   if (navigator.permissions && navigator.permissions.query) {
     navigator.permissions.query({ name: 'geolocation' }).then(function(r){
       if (r.state === 'granted') showScreen('scr-setup');
