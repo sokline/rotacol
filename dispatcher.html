@@ -14,7 +14,7 @@
   html, body { margin:0; height:100%; overflow:hidden;
                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 
-  /* SETUP */
+  /* ============ SETUP ============ */
   #setup { position: fixed; inset: 0; background: #eef1f6; z-index: 5000;
            display: flex; align-items: center; justify-content: center; padding: 20px;
            overflow-y: auto; }
@@ -30,39 +30,46 @@
     -webkit-appearance: none; appearance: none;
   }
   #setup input:focus, #setup select:focus { outline:none; border-color:#1a1a1a; background:#fff; }
-  #setup button { width: 100%; padding: 16px; font-size: 17px; font-weight: 600;
-                  border: none; border-radius: 12px; background: #1a1a1a; color:#fff; cursor:pointer; }
-  #setup button:active { transform: scale(.98); }
-  #setup button:disabled { background:#9aa; cursor: wait; }
+  #setup .btn-main { width: 100%; padding: 16px; font-size: 17px; font-weight: 600;
+                     border: none; border-radius: 12px; background: #1a1a1a; color:#fff;
+                     cursor:pointer; }
+  #setup .btn-main:active { transform: scale(.98); }
+  #setup .btn-main:disabled { background:#9aa; cursor: wait; }
+  #setup .btn-diag { width: 100%; padding: 12px; margin-top: 10px; font-size: 14px;
+                     font-weight: 500; border: 1px solid #ccc; border-radius: 10px;
+                     background: #fff; color: #1a1a1a; cursor: pointer; }
+  #setup .btn-diag:hover { background: #f3f4f6; }
   #setup .hint { margin-top: 14px; font-size: 12px; color:#888; line-height: 1.5; }
   #setup .adv { margin-top: 14px; font-size: 13px; color:#555; }
   #setup .adv summary { cursor: pointer; color:#1a1a1a; font-weight: 500; }
-  #setup #diag { background:#1a1a1a; color:#d0d0d0; font-family: ui-monospace, Menlo, monospace;
-                 font-size: 11px; padding: 10px; border-radius: 10px; margin-top: 10px;
-                 max-height: 240px; overflow-y: auto; line-height: 1.5; white-space: pre-wrap;
-                 word-break: break-all; }
-  #setup #diag .ok   { color:#6ee7a8; }
-  #setup #diag .fail { color:#ff8080; }
-  #setup #diag .warn { color:#ffd76e; }
-  #setup #diag .info { color:#8bb8ff; }
 
-  /* APP */
+  /* ============ APP ============ */
   #app { display: none; height: 100vh; width: 100vw; }
   #app.visible { display: flex; }
   #map { flex: 1; background: #e5e7eb; }
 
-  #sidebar { width: 340px; background:#fff; display:flex; flex-direction: column;
+  #sidebar { width: 360px; background:#fff; display:flex; flex-direction: column;
              border-left: 1px solid #e5e7eb; box-shadow: -4px 0 20px rgba(0,0,0,.05); z-index: 1000; }
   #sidebar header { padding: 12px 14px; border-bottom: 1px solid #eee;
-                    display:flex; align-items:center; gap: 8px; }
-  #sidebar h2 { margin: 0; font-size: 15px; flex: 1; letter-spacing: 1px; }
+                    display:flex; align-items:center; gap: 6px; flex-wrap: wrap; }
+  #sidebar h2 { margin: 0; font-size: 15px; letter-spacing: 1px; flex: 1; min-width: 100px; }
   #conn { font-size: 11px; padding: 3px 8px; border-radius: 10px;
           background: #eee; color: #666; white-space: nowrap; }
   #conn.on  { background:#d4f5dd; color:#0a5c2e; }
   #conn.err { background:#ffe0e0; color:#900; }
-  .btn-icon { border: none; background:#f3f4f6; padding: 6px 9px; border-radius: 8px;
-              cursor: pointer; font-size: 14px; line-height: 1; }
-  .btn-icon:hover { background:#e5e7eb; }
+
+  /* Кнопки в шапке: с текстом и иконкой */
+  .btn-action {
+    display: inline-flex; align-items: center; gap: 4px;
+    border: 1px solid #ddd; background:#fff; padding: 6px 10px;
+    border-radius: 8px; cursor: pointer; font-size: 12px;
+    font-family: inherit; color: #1a1a1a; white-space: nowrap;
+    transition: background .15s;
+  }
+  .btn-action:hover { background: #f3f4f6; }
+  .btn-action:active { transform: scale(.97); }
+  .btn-action.danger { color: #b91c1c; border-color: #fca5a5; }
+  .btn-action.danger:hover { background: #fef2f2; }
 
   #list { overflow-y: auto; flex: 1; }
   .driver { padding: 12px 16px; border-bottom: 1px solid #f0f0f0;
@@ -87,17 +94,10 @@
 
   /* Подписи под маркерами */
   .leaflet-tooltip.driver-label {
-    background: #ffffff;
-    border: none;
-    border-radius: 6px;
-    padding: 3px 8px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #1a1a1a;
-    box-shadow: 0 1px 6px rgba(0,0,0,.22);
-    white-space: nowrap;
-    pointer-events: auto;
-    cursor: pointer;
+    background: #ffffff; border: none; border-radius: 6px;
+    padding: 3px 8px; font-size: 12px; font-weight: 600;
+    color: #1a1a1a; box-shadow: 0 1px 6px rgba(0,0,0,.22);
+    white-space: nowrap; pointer-events: auto; cursor: pointer;
   }
   .leaflet-tooltip.driver-label::before { display: none; }
   .leaflet-tooltip.driver-label.is-online  { border-left: 3px solid #22c55e; color: #0a3d20; }
@@ -121,8 +121,58 @@
   }
   #baseSwitch select:hover { background: #f3f4f6; }
 
+  /* ============ ДИАГНОСТИЧЕСКАЯ ПАНЕЛЬ (fixed overlay) ============ */
+  #diagOverlay {
+    display: none;
+    position: fixed;
+    left: 20px; bottom: 20px; right: 20px; top: auto;
+    max-height: 55vh;
+    z-index: 9999;
+    background: #0f1115;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55);
+    border: 1px solid #2a2f3a;
+    overflow: hidden;
+    flex-direction: column;
+  }
+  #diagOverlay.open { display: flex; }
+  #diagOverlay .head {
+    background: #1a1f29; padding: 8px 12px; display: flex; align-items: center;
+    gap: 8px; color: #e6e8ec; font-size: 13px; font-weight: 500;
+    border-bottom: 1px solid #2a2f3a;
+  }
+  #diagOverlay .head .title { flex: 1; letter-spacing: .5px; }
+  #diagOverlay .head .count { font-size: 11px; color: #8b95a7; }
+  #diagOverlay .head button {
+    background: transparent; border: 1px solid #3a4150; color: #c8cdd6;
+    padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    font-family: inherit;
+  }
+  #diagOverlay .head button:hover { background: #2a3038; }
+  #diagBody {
+    flex: 1; overflow-y: auto; padding: 10px 12px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px; line-height: 1.55;
+    color: #d0d5dc; white-space: pre-wrap; word-break: break-all;
+  }
+  #diagBody .ok   { color: #6ee7a8; }
+  #diagBody .fail { color: #ff8080; }
+  #diagBody .warn { color: #ffd76e; }
+  #diagBody .info { color: #8bb8ff; }
+
+  /* Плавающая кнопка диагностики на мобильном/десктопе */
+  #diagFab {
+    position: fixed; left: 20px; bottom: 20px; z-index: 1099;
+    background: #1a1a1a; color: #fff; border: none;
+    width: 48px; height: 48px; border-radius: 50%; font-size: 22px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.35); cursor: pointer;
+    display: none;
+  }
+  #diagFab.visible { display: block; }
+  #diagFab:active { transform: scale(.95); }
+
   @media (max-width: 767px) {
-    #sidebar { position: fixed; top:0; right:0; bottom:0; width: 85%; max-width: 340px;
+    #sidebar { position: fixed; top:0; right:0; bottom:0; width: 88%; max-width: 360px;
                transform: translateX(100%); transition: transform .25s; }
     #sidebar.open { transform: none; }
     #toggle { position: fixed; bottom: 20px; right: 20px; z-index: 1100;
@@ -130,6 +180,7 @@
               background: #1a1a1a; color:#fff; font-size: 24px;
               box-shadow: 0 4px 16px rgba(0,0,0,.35); cursor: pointer; }
     #baseSwitch select { max-width: 150px; font-size: 12px; }
+    #diagOverlay { left: 8px; right: 8px; bottom: 8px; max-height: 70vh; }
   }
   @media (min-width: 768px) { #toggle, #close { display:none !important; } }
 </style>
@@ -170,15 +221,15 @@
       </select>
     </details>
 
-    <button id="connect" style="margin-top:16px">Подключиться</button>
+    <button id="connect" class="btn-main" style="margin-top:16px">Подключиться</button>
+
+    <button id="diagToggle" class="btn-diag" type="button">
+      🔍 Показать диагностику
+    </button>
+
     <div class="hint">
       Код и ключ вводятся вручную и в URL не попадают.
     </div>
-
-    <button id="diagToggle" style="background:#eef3f8;color:#1a1a1a;margin-top:10px;font-size:14px;padding:12px">
-      🩺 Показать диагностику
-    </button>
-    <div id="diag" style="display:none"></div>
   </div>
 </div>
 
@@ -197,45 +248,101 @@
   </div>
 
   <button id="toggle" aria-label="Список">☰</button>
+
+  <!-- Плавающая круглая кнопка диагностики (появляется при активной карте) -->
+  <button id="diagFab" title="Диагностика">🔍</button>
+
   <aside id="sidebar">
     <header>
       <h2>АГЕНТЫ</h2>
       <span id="conn">…</span>
-      <button class="btn-icon" id="fit"    title="Показать всех">🎯</button>
-      <button class="btn-icon" id="diagToggle2" title="Диагностика">🩺</button>
-      <button class="btn-icon" id="change" title="Сменить группу">⚙</button>
-      <button class="btn-icon" id="close"  title="Закрыть">✕</button>
+      <button class="btn-action" id="fit"    type="button">🎯 Все</button>
+      <button class="btn-action" id="diagToggle2" type="button">🔍 Лог</button>
+      <button class="btn-action" id="change" type="button">⚙ Группа</button>
+      <button class="btn-action danger" id="close" type="button">✕</button>
     </header>
-    <div id="diag2" style="display:none;background:#1a1a1a;color:#d0d0d0;
-         font-family:ui-monospace,monospace;font-size:11px;padding:10px;
-         max-height:200px;overflow-y:auto;line-height:1.5;white-space:pre-wrap;
-         word-break:break-all"></div>
     <div id="list"></div>
   </aside>
 </div>
 
+<!-- Диагностическая панель поверх всего -->
+<div id="diagOverlay">
+  <div class="head">
+    <span class="title">🔍 ДИАГНОСТИКА</span>
+    <span class="count" id="diagCount">0 строк</span>
+    <button id="diagCopy" type="button">Копировать</button>
+    <button id="diagClear" type="button">Очистить</button>
+    <button id="diagClose" type="button">Закрыть ✕</button>
+  </div>
+  <div id="diagBody"></div>
+</div>
+
 <script>
 // ============================================================
-//  ЛОГ
+//  ЛОГ (пишет в overlay)
 // ============================================================
 const LOG = [];
 function log(msg, kind) {
   const t = new Date().toLocaleTimeString('ru-RU');
   const line = `[${t}] ${msg}`;
   LOG.push({ line, kind });
-  const html = LOG.map(x =>
-    `<span class="${x.kind||'info'}">${escapeHtml(x.line)}</span>`
-  ).join('\n');
-  const el1 = document.getElementById('diag');
-  const el2 = document.getElementById('diag2');
-  if (el1) { el1.innerHTML = html; el1.scrollTop = el1.scrollHeight; }
-  if (el2) { el2.innerHTML = html; el2.scrollTop = el2.scrollHeight; }
+  const body = document.getElementById('diagBody');
+  const cnt  = document.getElementById('diagCount');
+  if (body) {
+    body.innerHTML = LOG.map(x =>
+      `<span class="${x.kind||'info'}">${escapeHtml(x.line)}</span>`
+    ).join('\n');
+    body.scrollTop = body.scrollHeight;
+  }
+  if (cnt) cnt.textContent = LOG.length + ' строк';
   console.log('[dispatcher]', msg);
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// ============================================================
+//  Управление диагностической панелью
+// ============================================================
+function openDiag() {
+  const el = document.getElementById('diagOverlay');
+  if (el) el.classList.add('open');
+  const fab = document.getElementById('diagFab');
+  if (fab) fab.style.display = 'none';
+}
+function closeDiag() {
+  const el = document.getElementById('diagOverlay');
+  if (el) el.classList.remove('open');
+  const fab = document.getElementById('diagFab');
+  const app = document.getElementById('app');
+  if (fab && app && app.classList.contains('visible')) fab.classList.add('visible');
+}
+function toggleDiag() {
+  const el = document.getElementById('diagOverlay');
+  if (!el) return;
+  if (el.classList.contains('open')) closeDiag(); else openDiag();
+}
+
+document.getElementById('diagToggle').addEventListener('click', toggleDiag);
+document.getElementById('diagToggle2').addEventListener('click', toggleDiag);
+document.getElementById('diagFab').addEventListener('click', toggleDiag);
+document.getElementById('diagClose').addEventListener('click', closeDiag);
+document.getElementById('diagClear').addEventListener('click', () => {
+  LOG.length = 0;
+  document.getElementById('diagBody').innerHTML = '';
+  document.getElementById('diagCount').textContent = '0 строк';
+});
+document.getElementById('diagCopy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(LOG.map(x => x.line).join('\n'));
+    const btn = document.getElementById('diagCopy');
+    btn.textContent = '✅ Скопировано';
+    setTimeout(() => { btn.textContent = 'Копировать'; }, 1500);
+  } catch (e) {
+    alert('Не удалось скопировать');
+  }
+});
 
 // ============================================================
 //  CDN-загрузчики
@@ -366,6 +473,7 @@ async function decryptPayload(key, b64url) {
   const listEl    = $('list');
   const sidebar   = $('sidebar');
   const connectBtn = $('connect');
+  const diagFab   = $('diagFab');
 
   let map = null;
   let currentBaseLayer = null;
@@ -374,7 +482,6 @@ async function decryptPayload(key, b64url) {
   let cryptoKey = null;
   let baseTopic = '';
   let didInitialCenter = false;
-  let subscribed = false;
 
   const drivers = new Map();
 
@@ -418,16 +525,6 @@ async function decryptPayload(key, b64url) {
   function sanitize(s) {
     return String(s || '').trim().replace(/[^a-zA-Z0-9_\-]/g, '-').slice(0, 64);
   }
-
-  // --------- Диагностические тумблеры ---------
-  $('diagToggle').addEventListener('click', () => {
-    const el = $('diag');
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
-  });
-  $('diagToggle2').addEventListener('click', () => {
-    const el = $('diag2');
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
-  });
 
   // --------- Карта ---------
   function setBaseLayer(key) {
@@ -608,8 +705,7 @@ async function decryptPayload(key, b64url) {
       if (!packed) return;
       p = await decryptPayload(cryptoKey, packed);
     } catch (e) {
-      // Чужое или нерасшифровываемое — игнорируем молча
-      return;
+      return; // чужое или нерасшифровываемое
     }
     if (!p || !p.id) return;
 
@@ -673,22 +769,34 @@ async function decryptPayload(key, b64url) {
     const pts = [...drivers.values()]
       .filter(e => e.data.lat != null)
       .map(e => [e.data.lat, e.data.lng]);
-    if (!pts.length) return;
+    if (!pts.length) {
+      log('Нет агентов с координатами — нечего показывать.', 'warn');
+      return;
+    }
     map.fitBounds(L.latLngBounds(pts).pad(0.2));
   });
 
   $('change').addEventListener('click', () => {
-    if (client) { try { client.end(true); } catch {} client = null; }
-    baseTopic = '';
-    cryptoKey = null;
-    subscribed = false;
-    drivers.clear();
-    if (map) { map.remove(); map = null; currentBaseLayer = null; }
-    appEl.classList.remove('visible');
-    setupEl.style.display = 'flex';
-    didInitialCenter = false;
-    connectBtn.disabled = false;
-    topicEl.focus();
+    log('Смена группы: отключаюсь от текущей…', 'info');
+    try {
+      if (client) { try { client.end(true); } catch {} client = null; }
+      baseTopic = '';
+      cryptoKey = null;
+      drivers.clear();
+      if (map) { map.remove(); map = null; currentBaseLayer = null; }
+      diagFab.classList.remove('visible');
+      appEl.classList.remove('visible');
+      setupEl.style.display = 'flex';
+      didInitialCenter = false;
+      connectBtn.disabled = false;
+      connectBtn.textContent = 'Подключиться';
+      setConn('', '…');
+      topicEl.focus();
+      log('✅ Готово к вводу новой группы.', 'ok');
+    } catch (e) {
+      log('❌ Ошибка при смене группы: ' + e.message, 'fail');
+      alert('Не удалось переключить группу: ' + e.message);
+    }
   });
 
   $('toggle').addEventListener('click', () => sidebar.classList.toggle('open'));
@@ -750,7 +858,7 @@ async function decryptPayload(key, b64url) {
     }
     let lastErr = null;
     for (const [url, label] of list) {
-      try { return { client: await tryBroker(url, label), url, label }; }
+      try { return await tryBroker(url, label); }
       catch (e) { lastErr = e; log('Пробую следующий…', 'info'); }
     }
     throw lastErr || new Error('no broker');
@@ -777,10 +885,13 @@ async function decryptPayload(key, b64url) {
     currentBaseKey = baseMapSel.value || 'positron';
     try { localStorage.setItem(LS_BASEMAP, currentBaseKey); } catch {}
 
+    log('=== ПОДКЛЮЧЕНИЕ ===', 'info');
+
     try {
       await Promise.all([loadScriptAny(MQTT_CDNS), loadScriptAny(LEAFLET_CDNS)]);
       log('✅ Библиотеки загружены', 'ok');
     } catch (e) {
+      log('❌ Не удалось загрузить библиотеки с CDN', 'fail');
       alert('Не удалось загрузить библиотеки с CDN.');
       connectBtn.disabled = false;
       connectBtn.textContent = 'Подключиться';
@@ -809,6 +920,7 @@ async function decryptPayload(key, b64url) {
 
     setupEl.style.display = 'none';
     appEl.classList.add('visible');
+    diagFab.classList.add('visible');
 
     await new Promise(r => setTimeout(r, 50));
     initMap();
@@ -823,40 +935,36 @@ async function decryptPayload(key, b64url) {
 
     setConn('', 'подключение…');
 
-    let res;
     try {
-      res = await connectAnyBroker();
-      client = res.client;
-      log('✅ Соединение установлено с ' + res.label, 'ok');
+      client = await connectAnyBroker();
+      log('✅ Соединение установлено', 'ok');
     } catch (e) {
-      log('❌ Все брокеры недоступны', 'fail');
+      log('❌ Все брокеры недоступны: ' + e.message, 'fail');
       setConn('err', 'нет связи');
       alert('Не удалось подключиться к серверу связи.');
       return;
     }
 
-    // === КЛЮЧЕВОЙ ФИКС: подписка выполняется СРАЗУ, соединение уже установлено ===
     setConn('on', 'онлайн');
 
+    // === КЛЮЧЕВОЕ: подписка СРАЗУ, соединение уже установлено
     client.subscribe(baseTopic + '/+', { qos: 1 }, (err) => {
       if (err) {
         log('❌ Ошибка подписки: ' + err.message, 'fail');
         setConn('err', 'ошибка подписки');
       } else {
-        subscribed = true;
         log('✅ Подписка оформлена на ' + baseTopic + '/+', 'ok');
         log('Ждём сообщения от агентов…', 'info');
       }
     });
 
-    // На случай реконнекта — подписываемся повторно
+    // На случай реконнекта
     client.on('connect', () => {
       setConn('on', 'онлайн');
       log('🔁 MQTT переподключился, восстанавливаю подписку', 'warn');
       client.subscribe(baseTopic + '/+', { qos: 1 });
     });
 
-    // Приём сообщений
     client.on('message', (topic, payload) => {
       log('📥 MQTT пришло на ' + topic + ' (' + payload.length + ' байт)', 'info');
       handleMessage({ topic, payload });
