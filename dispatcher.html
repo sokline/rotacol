@@ -16,7 +16,8 @@
 
   /* SETUP */
   #setup { position: fixed; inset: 0; background: #eef1f6; z-index: 5000;
-           display: flex; align-items: center; justify-content: center; padding: 20px; }
+           display: flex; align-items: center; justify-content: center; padding: 20px;
+           overflow-y: auto; }
   #setup .box { background:#fff; padding: 28px; border-radius: 16px;
                 box-shadow: 0 10px 40px rgba(0,0,0,.1); width: 100%; max-width: 460px; }
   #setup h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: 1px; }
@@ -36,6 +37,14 @@
   #setup .hint { margin-top: 14px; font-size: 12px; color:#888; line-height: 1.5; }
   #setup .adv { margin-top: 14px; font-size: 13px; color:#555; }
   #setup .adv summary { cursor: pointer; color:#1a1a1a; font-weight: 500; }
+  #setup #diag { background:#1a1a1a; color:#d0d0d0; font-family: ui-monospace, Menlo, monospace;
+                 font-size: 11px; padding: 10px; border-radius: 10px; margin-top: 10px;
+                 max-height: 240px; overflow-y: auto; line-height: 1.5; white-space: pre-wrap;
+                 word-break: break-all; }
+  #setup #diag .ok   { color:#6ee7a8; }
+  #setup #diag .fail { color:#ff8080; }
+  #setup #diag .warn { color:#ffd76e; }
+  #setup #diag .info { color:#8bb8ff; }
 
   /* APP */
   #app { display: none; height: 100vh; width: 100vw; }
@@ -99,7 +108,7 @@
   .leaflet-tooltip.driver-label.is-offline .label-time { color: #999; }
   .leaflet-tooltip.driver-label:hover { background: #f3f6fb; }
 
-  /* Плавающий выбор карты */
+  /* Плавающий селектор стиля карты */
   #baseSwitch {
     position: fixed; top: 12px; left: 12px; z-index: 1100;
     background: #fff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.15);
@@ -165,6 +174,11 @@
     <div class="hint">
       Код и ключ вводятся вручную и в URL не попадают.
     </div>
+
+    <button id="diagToggle" style="background:#eef3f8;color:#1a1a1a;margin-top:10px;font-size:14px;padding:12px">
+      🩺 Показать диагностику
+    </button>
+    <div id="diag" style="display:none"></div>
   </div>
 </div>
 
@@ -188,15 +202,44 @@
       <h2>АГЕНТЫ</h2>
       <span id="conn">…</span>
       <button class="btn-icon" id="fit"    title="Показать всех">🎯</button>
+      <button class="btn-icon" id="diagToggle2" title="Диагностика">🩺</button>
       <button class="btn-icon" id="change" title="Сменить группу">⚙</button>
       <button class="btn-icon" id="close"  title="Закрыть">✕</button>
     </header>
+    <div id="diag2" style="display:none;background:#1a1a1a;color:#d0d0d0;
+         font-family:ui-monospace,monospace;font-size:11px;padding:10px;
+         max-height:200px;overflow-y:auto;line-height:1.5;white-space:pre-wrap;
+         word-break:break-all"></div>
     <div id="list"></div>
   </aside>
 </div>
 
 <script>
-// ============ CDN-загрузчики ============
+// ============================================================
+//  ЛОГ
+// ============================================================
+const LOG = [];
+function log(msg, kind) {
+  const t = new Date().toLocaleTimeString('ru-RU');
+  const line = `[${t}] ${msg}`;
+  LOG.push({ line, kind });
+  const html = LOG.map(x =>
+    `<span class="${x.kind||'info'}">${escapeHtml(x.line)}</span>`
+  ).join('\n');
+  const el1 = document.getElementById('diag');
+  const el2 = document.getElementById('diag2');
+  if (el1) { el1.innerHTML = html; el1.scrollTop = el1.scrollHeight; }
+  if (el2) { el2.innerHTML = html; el2.scrollTop = el2.scrollHeight; }
+  console.log('[dispatcher]', msg);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============================================================
+//  CDN-загрузчики
+// ============================================================
 function loadScript(url) {
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -222,7 +265,9 @@ const LEAFLET_CDNS = [
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
-// ============ Базовые карты ============
+// ============================================================
+//  Базовые карты
+// ============================================================
 const BASE_MAPS = {
   positron: {
     name: '🌍 Positron',
@@ -264,7 +309,9 @@ const BASE_MAPS = {
   }
 };
 
-// ============ КРИПТО ============
+// ============================================================
+//  КРИПТО
+// ============================================================
 function b64urlToBytes(s) {
   const b64 = s.replace(/-/g,'+').replace(/_/g,'/');
   const bin = atob(b64);
@@ -299,7 +346,9 @@ async function decryptPayload(key, b64url) {
   return JSON.parse(new TextDecoder().decode(pt));
 }
 
-// ============ ОСНОВНАЯ ЛОГИКА ============
+// ============================================================
+//  ОСНОВНАЯ ЛОГИКА
+// ============================================================
 (function () {
   const OFFLINE_AFTER = 90000;
   const TOPIC_PREFIX  = 'rotacol-v1';
@@ -325,8 +374,18 @@ async function decryptPayload(key, b64url) {
   let cryptoKey = null;
   let baseTopic = '';
   let didInitialCenter = false;
+  let subscribed = false;
 
   const drivers = new Map();
+
+  // Логирование окружения
+  log('=== ДИАГНОСТИКА ОКРУЖЕНИЯ ===', 'info');
+  log('URL: ' + location.href.slice(0, 120), 'info');
+  log('Протокол: ' + location.protocol, location.protocol === 'https:' ? 'ok' : 'warn');
+  log('Secure context: ' + (window.isSecureContext ? 'ДА' : 'НЕТ'),
+      window.isSecureContext ? 'ok' : 'fail');
+  log('crypto.subtle: ' + (window.crypto && crypto.subtle ? 'есть' : 'НЕТ'),
+      (window.crypto && crypto.subtle) ? 'ok' : 'fail');
 
   // Предзаполнение
   try {
@@ -359,6 +418,16 @@ async function decryptPayload(key, b64url) {
   function sanitize(s) {
     return String(s || '').trim().replace(/[^a-zA-Z0-9_\-]/g, '-').slice(0, 64);
   }
+
+  // --------- Диагностические тумблеры ---------
+  $('diagToggle').addEventListener('click', () => {
+    const el = $('diag');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  });
+  $('diagToggle2').addEventListener('click', () => {
+    const el = $('diag2');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  });
 
   // --------- Карта ---------
   function setBaseLayer(key) {
@@ -539,10 +608,14 @@ async function decryptPayload(key, b64url) {
       if (!packed) return;
       p = await decryptPayload(cryptoKey, packed);
     } catch (e) {
-      // Чужое сообщение в топик (или с другим ключом) — молча игнорируем
+      // Чужое или нерасшифровываемое — игнорируем молча
       return;
     }
     if (!p || !p.id) return;
+
+    log('📨 Расшифровано: ' + (p.name||p.id) +
+        (p.lat != null ? ' ' + p.lat.toFixed(5) + ',' + p.lng.toFixed(5) : ''),
+        'ok');
 
     const driverId = p.id;
     let entry = drivers.get(driverId);
@@ -608,6 +681,7 @@ async function decryptPayload(key, b64url) {
     if (client) { try { client.end(true); } catch {} client = null; }
     baseTopic = '';
     cryptoKey = null;
+    subscribed = false;
     drivers.clear();
     if (map) { map.remove(); map = null; currentBaseLayer = null; }
     appEl.classList.remove('visible');
@@ -628,8 +702,9 @@ async function decryptPayload(key, b64url) {
   groupKeyEl.addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
 
   // --------- MQTT ---------
-  function tryBroker(url, label, onMessage) {
+  function tryBroker(url, label) {
     return new Promise((resolve, reject) => {
+      log('Подключаюсь к ' + label + '…', 'info');
       const c = mqtt.connect(url, {
         clientId: 'n-' + Math.random().toString(16).slice(2, 10),
         clean: true, keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000
@@ -638,6 +713,7 @@ async function decryptPayload(key, b64url) {
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
+          log('❌ Тайм-аут к ' + label, 'fail');
           try { c.end(true); } catch {}
           reject(new Error('timeout ' + label));
         }
@@ -645,9 +721,11 @@ async function decryptPayload(key, b64url) {
 
       c.on('connect', () => {
         clearTimeout(timeout);
+        log('✅ Подключено к ' + label, 'ok');
         if (!resolved) { resolved = true; resolve(c); }
       });
       c.on('error', (err) => {
+        log('⚠️ ' + label + ': ' + (err.message || err), 'warn');
         if (!resolved) {
           clearTimeout(timeout);
           resolved = true;
@@ -672,13 +750,15 @@ async function decryptPayload(key, b64url) {
     }
     let lastErr = null;
     for (const [url, label] of list) {
-      try { return await tryBroker(url, label); }
-      catch (e) { lastErr = e; }
+      try { return { client: await tryBroker(url, label), url, label }; }
+      catch (e) { lastErr = e; log('Пробую следующий…', 'info'); }
     }
     throw lastErr || new Error('no broker');
   }
 
-  // --------- Подключение ---------
+  // ============================================================
+  //  ПОДКЛЮЧЕНИЕ
+  // ============================================================
   async function connect() {
     const code = sanitize(topicEl.value);
     const key  = groupKeyEl.value.trim();
@@ -699,6 +779,7 @@ async function decryptPayload(key, b64url) {
 
     try {
       await Promise.all([loadScriptAny(MQTT_CDNS), loadScriptAny(LEAFLET_CDNS)]);
+      log('✅ Библиотеки загружены', 'ok');
     } catch (e) {
       alert('Не удалось загрузить библиотеки с CDN.');
       connectBtn.disabled = false;
@@ -716,7 +797,10 @@ async function decryptPayload(key, b64url) {
       const roomHash = await deriveRoomHash(code, key);
       cryptoKey      = await deriveCryptoKey(code, key);
       baseTopic      = TOPIC_PREFIX + '/' + roomHash;
+      log('✅ Хеш группы: ' + roomHash, 'ok');
+      log('Подписка будет на: ' + baseTopic + '/+', 'info');
     } catch (e) {
+      log('❌ Крипто-ошибка: ' + e.message, 'fail');
       alert('Ошибка криптографии: ' + e.message);
       connectBtn.disabled = false;
       connectBtn.textContent = 'Подключиться';
@@ -738,25 +822,49 @@ async function decryptPayload(key, b64url) {
     connectBtn.disabled = false;
 
     setConn('', 'подключение…');
+
+    let res;
     try {
-      client = await connectAnyBroker();
+      res = await connectAnyBroker();
+      client = res.client;
+      log('✅ Соединение установлено с ' + res.label, 'ok');
     } catch (e) {
+      log('❌ Все брокеры недоступны', 'fail');
       setConn('err', 'нет связи');
       alert('Не удалось подключиться к серверу связи.');
       return;
     }
 
-    client.on('connect', () => {
-      setConn('on', 'онлайн');
-      client.subscribe(baseTopic + '/+', { qos: 1 }, (err) => {
-        if (err) setConn('err', 'ошибка подписки');
-      });
+    // === КЛЮЧЕВОЙ ФИКС: подписка выполняется СРАЗУ, соединение уже установлено ===
+    setConn('on', 'онлайн');
+
+    client.subscribe(baseTopic + '/+', { qos: 1 }, (err) => {
+      if (err) {
+        log('❌ Ошибка подписки: ' + err.message, 'fail');
+        setConn('err', 'ошибка подписки');
+      } else {
+        subscribed = true;
+        log('✅ Подписка оформлена на ' + baseTopic + '/+', 'ok');
+        log('Ждём сообщения от агентов…', 'info');
+      }
     });
 
-    client.on('message', (topic, payload) => handleMessage({ topic, payload }));
-    client.on('reconnect', () => setConn('', 'переподключение…'));
-    client.on('close',     () => setConn('err', 'нет связи'));
-    client.on('error',     () => setConn('err', 'ошибка'));
+    // На случай реконнекта — подписываемся повторно
+    client.on('connect', () => {
+      setConn('on', 'онлайн');
+      log('🔁 MQTT переподключился, восстанавливаю подписку', 'warn');
+      client.subscribe(baseTopic + '/+', { qos: 1 });
+    });
+
+    // Приём сообщений
+    client.on('message', (topic, payload) => {
+      log('📥 MQTT пришло на ' + topic + ' (' + payload.length + ' байт)', 'info');
+      handleMessage({ topic, payload });
+    });
+
+    client.on('reconnect', () => { setConn('', 'переподключение…'); });
+    client.on('close',     () => { setConn('err', 'нет связи'); log('MQTT: соединение закрыто', 'warn'); });
+    client.on('error',     (e) => { setConn('err', 'ошибка'); log('MQTT error: ' + (e.message||e), 'fail'); });
   }
 })();
 </script>
