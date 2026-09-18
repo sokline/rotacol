@@ -2,953 +2,661 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<meta name="theme-color" content="#1a1a1a">
-<title>АГЕНТ — передача геолокации</title>
-
-<!-- ===================== PWA ===================== -->
-<link rel="manifest" href="./manifest-agent.json">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
 <meta name="color-scheme" content="dark light">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Агент">
+<title>АГЕНТ — передача геолокации</title>
+
+<!-- ===================== PWA ===================== -->
+<link rel="manifest" href="./manifest-agent.json">
 <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">
 <script src="./pwa.js" defer></script>
+<script src="./features.js" defer></script>
 <!-- =============================================== -->
-      
+
 <link rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
 
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         margin: 0; padding: 16px; background: #f5f7fa; color: #1a1a1a; min-height: 100vh; }
-  h1 { font-size: 19px; margin: 0 0 4px; }
-  .sub { font-size: 12px; color:#888; margin-bottom: 14px; letter-spacing: 1px; }
-  .card { background: #fff; border-radius: 14px; padding: 16px;
-          box-shadow: 0 2px 10px rgba(0,0,0,.06); margin-bottom: 12px; }
-  label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
-  input, select { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd;
-                  border-radius: 10px; margin-bottom: 12px; background: #fafbfc;
-                  -webkit-appearance: none; appearance: none; }
-  input:focus, select:focus { outline: none; border-color: #0d6efd; background:#fff; }
-  button { width: 100%; padding: 15px; font-size: 16px; font-weight: 600;
-           border: none; border-radius: 12px; background: #1a1a1a; color: #fff;
-           cursor: pointer; }
-  button:active { transform: scale(.98); }
-  button:disabled { background: #9aa; }
-  button.stop { background: #dc3545; }
-  button.ghost { background:#eef3f8; color:#1a1a1a; margin-top:8px; }
-  .status { padding: 12px; border-radius: 12px; font-size: 14px; background: #eef3f8;
-            margin-bottom: 10px; line-height: 1.45; }
-  .status.on  { background: #d4f5dd; color: #0a5c2e; }
-  .status.err { background: #ffe0e0; color: #900; }
-  .status.warn{ background:#fff3cd; color:#7a5500; }
-  .coords { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px;
-            word-break: break-all; margin-bottom: 6px; }
-  .small { font-size: 12px; color: #888; margin-top: 6px; line-height: 1.5; }
-  .hidden { display: none !important; }
-  .dot { display:inline-block; width:10px; height:10px; border-radius:50%;
-         background:#9aa; margin-right:8px; vertical-align:middle; }
-  .dot.on  { background:#22c55e; animation: pulse 1.5s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: #0b1220; color: #e5e7eb;
+  font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+body { padding: env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0); }
+.screen { display: none; min-height: 100dvh; padding: 16px; }
+.screen.on { display: block; }
 
-  /* Карта агента */
-  #myMap {
-    height: 260px; border-radius: 12px; overflow: hidden;
-    margin: 10px 0 6px; background: #e5e7eb;
-  }
-  .map-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
-  .map-row select {
-    flex: 1; margin-bottom: 0; padding: 8px 10px; font-size: 13px;
-  }
-  .map-row button {
-    flex: 0 0 auto; width: auto; padding: 8px 12px; font-size: 13px;
-    font-weight: 500; background: #eef3f8; color: #1a1a1a;
-  }
-  .map-row button:active { transform: scale(.96); }
+h1 { font-size: 22px; margin: 8px 0 4px; }
+h2 { font-size: 18px; margin: 4px 0 12px; }
+.sub { opacity: .6; font-size: 13px; margin-bottom: 16px; }
+.card { background: #111827; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
 
-  /* Маркер агента */
-  .agent-marker-icon {
-    background: transparent; border: none;
-  }
-  .agent-marker-icon .pin {
-    width: 22px; height: 22px; border-radius: 50%;
-    background: #1a1a1a;
-    border: 4px solid #fff;
-    box-shadow: 0 0 12px rgba(0,0,0,.55), 0 0 0 2px rgba(26,26,26,.25);
-  }
-  .agent-marker-icon .pin.pulse {
-    animation: agentPulse 1.6s infinite;
-  }
-  @keyframes agentPulse {
-    0%   { box-shadow: 0 0 0 0 rgba(26,26,26,.55), 0 0 0 2px rgba(26,26,26,.25); }
-    70%  { box-shadow: 0 0 0 18px rgba(26,26,26,0), 0 0 0 2px rgba(26,26,26,.25); }
-    100% { box-shadow: 0 0 0 0 rgba(26,26,26,0), 0 0 0 2px rgba(26,26,26,.25); }
-  }
+label.f { display: block; margin-bottom: 12px; }
+label.f span { display: block; font-size: 12px; opacity: .7; margin-bottom: 5px; }
+input, select {
+  width: 100%; padding: 11px 12px; border-radius: 10px;
+  border: 1px solid #374151; background: #0b1220; color: #e5e7eb;
+  font: 15px/1.2 inherit; outline: none;
+}
+input:focus, select:focus { border-color: #1f6feb; }
 
-  #diag { background:#1a1a1a; color:#d0d0d0; font-family: ui-monospace, Menlo, monospace;
-          font-size: 11px; padding: 10px; border-radius: 10px; margin-top: 8px;
-          max-height: 260px; overflow-y: auto; line-height: 1.5; white-space: pre-wrap;
-          word-break: break-all; }
-  #diag .ok   { color:#6ee7a8; }
-  #diag .fail { color:#ff8080; }
-  #diag .warn { color:#ffd76e; }
-  #diag .info { color:#8bb8ff; }
+button.big {
+  display: block; width: 100%; border: 0; border-radius: 12px;
+  padding: 15px 18px; font: 700 16px/1 inherit; cursor: pointer;
+  background: linear-gradient(135deg,#1f6feb,#0ea5e9); color: #fff;
+  margin-top: 8px;
+}
+button.big:active { transform: scale(.98); }
+button.big.green { background: linear-gradient(135deg,#22c55e,#16a34a); color: #04210f; }
+button.big.red   { background: linear-gradient(135deg,#ef4444,#dc2626); }
+button.big.ghost { background: #1f2937; color: #e5e7eb; }
 
-  .perm-icon { font-size: 40px; text-align: center; margin: 4px 0 10px; }
-  .perm-title { text-align: center; font-weight: 600; font-size: 16px; margin: 0 0 6px; }
-  .perm-text { text-align: center; font-size: 13px; color: #555; line-height: 1.5;
-               margin: 0 0 14px; }
-  details { margin-top: 10px; font-size: 13px; color:#555; }
-  summary { cursor: pointer; color: #1a1a1a; font-weight: 500; }
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; }
+
+.status { padding: 12px 14px; border-radius: 10px; font-weight: 600; text-align: center; margin-bottom: 12px; }
+.status.on  { background: #064e3b; color: #6ee7b7; }
+.status.off { background: #7f1d1d; color: #fecaca; }
+
+.coords {
+  font: 600 20px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .3px; padding: 4px 0;
+}
+.meta { font-size: 12px; opacity: .65; }
+
+#minimap { height: 260px; border-radius: 12px; overflow: hidden; margin: 10px 0; background: #0f172a; }
+.leaflet-container { background: #0f172a; }
+
+.log {
+  background: #0b1220; border: 1px solid #1f2937; border-radius: 10px;
+  padding: 10px; max-height: 200px; overflow: auto;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; word-break: break-word; margin-top: 8px;
+}
+.log .e { color: #fca5a5; }
+.log .w { color: #fcd34d; }
+.log .i { color: #93c5fd; }
+
+.gps-ok { color: #6ee7b7; }
+.gps-bad { color: #fca5a5; }
+
+.hidden { display: none !important; }
 </style>
 </head>
 <body>
-  <h1>🕵️ АГЕНТ</h1>
-  <div class="sub">ПЕРЕДАЧА ГЕОЛОКАЦИИ</div>
 
-  <!-- Экран разрешения GPS -->
-  <div class="card" id="permissionCard">
-    <div class="perm-icon" id="permIcon">📍</div>
-    <p class="perm-title" id="permTitle">Доступ к геолокации</p>
-    <p class="perm-text" id="permText">
-      Нажмите кнопку — браузер спросит разрешение. Без него передача работать не будет.
-    </p>
-    <button id="askPermBtn">📍 Разрешить доступ</button>
-    <div class="status hidden" id="permStatus" style="margin-top:14px"></div>
+<!-- ============ ЭКРАН 1: разрешение GPS ============ -->
+<section id="scr-perm" class="screen on">
+  <div class="card">
+    <h1>📍 Доступ к геолокации</h1>
+    <div class="sub">Для передачи позиции нужно разрешение на доступ к GPS.</div>
+    <button class="big" id="btn-perm">📍 Разрешить доступ</button>
+    <div id="perm-status" class="meta" style="margin-top:12px"></div>
   </div>
+</section>
 
-  <!-- Экран настроек -->
-  <div class="card hidden" id="setupCard">
-    <label for="name">Ваше имя *</label>
-    <input id="name" placeholder="Например: Пётр Иванов" autocomplete="name">
-
-    <label for="car">Машина / гос. номер</label>
-    <input id="car" placeholder="Например: А123БВ 77" autocomplete="off">
-
-    <label for="topic">Код группы *</label>
-    <input id="topic" placeholder="park-a1b2c3" autocomplete="off">
-
-    <label for="groupkey">Ключ группы *</label>
-    <input id="groupkey" type="password" placeholder="выдаётся отдельно от кода" autocomplete="off">
-
-    <button id="start">▶ Начать передачу</button>
-
-    <details>
-      <summary>Дополнительно</summary>
-      <label for="broker" style="margin-top:10px">Сервер связи</label>
-      <select id="broker">
-        <option value="auto">Автоматически (рекомендуется)</option>
-        <option value="broker.emqx.io:8084/mqtt">broker.emqx.io</option>
-        <option value="broker.hivemq.com:8884/mqtt">broker.hivemq.com</option>
-        <option value="test.mosquitto.org:8081/mqtt">test.mosquitto.org</option>
+<!-- ============ ЭКРАН 2: настройки ============ -->
+<section id="scr-setup" class="screen">
+  <div class="card">
+    <h2>⚙️ Настройки</h2>
+    <label class="f"><span>Ваше имя</span><input id="in-name" placeholder="Например: Иван" autocomplete="name"></label>
+    <label class="f"><span>Машина / борт</span><input id="in-car" placeholder="Например: Газель А123БВ" autocomplete="off"></label>
+    <label class="f"><span>Код группы</span><input id="in-topic" placeholder="a-zA-Z0-9_- до 64" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label class="f"><span>Ключ группы</span><input id="in-key" type="password" placeholder="Секрет" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label class="f"><span>Сервер связи</span>
+      <select id="in-broker">
+        <option value="auto">Автоматически</option>
+        <option value="wss://broker.emqx.io:8084/mqtt">broker.emqx.io (основной)</option>
+        <option value="wss://broker.hivemq.com:8884/mqtt">broker.hivemq.com</option>
+        <option value="wss://test.mosquitto.org:8081/mqtt">test.mosquitto.org</option>
       </select>
-      <div class="small">Если не подключается — попробуйте вручную.</div>
-
-      <label for="baseMap" style="margin-top:12px">Стиль карты</label>
-      <select id="baseMap">
-        <option value="positron">🌍 Positron (светлая)</option>
-        <option value="hot">🛣 OSM HOT</option>
-        <option value="de">🇩🇪 OSM DE</option>
-        <option value="esri">🏙 Esri World Street</option>
-        <option value="topo">⛰ OpenTopoMap</option>
-        <option value="sat">🛰 Спутник (Esri)</option>
+    </label>
+    <label class="f"><span>Стиль карты</span>
+      <select id="in-map">
+        <option value="positron">Positron (OpenFreeMap)</option>
+        <option value="osm-hot">OSM HOT</option>
+        <option value="osm-de">OSM DE</option>
+        <option value="esri-street">Esri World Street</option>
+        <option value="topo">OpenTopoMap</option>
+        <option value="sat">Esri World Imagery (спутник)</option>
       </select>
-    </details>
-
-    <button class="ghost" id="diagToggle">🩺 Показать диагностику</button>
-    <div id="diag" class="hidden"></div>
+    </label>
+    <button class="big green" id="btn-start">🚀 Начать передачу</button>
   </div>
+  <div class="log" id="log-setup"></div>
+</section>
 
-  <!-- Экран отслеживания -->
-  <div class="card hidden" id="trackCard">
-    <div class="status" id="status"><span class="dot"></span>Инициализация…</div>
-    <div class="coords" id="coords">—</div>
-    <div class="small" id="meta"></div>
-
-    <!-- МИНИ-КАРТА АГЕНТА -->
-    <div class="map-row">
-      <select id="mapStyleInline" title="Стиль карты">
-        <option value="positron">🌍 Positron</option>
-        <option value="hot">🛣 OSM HOT</option>
-        <option value="de">🇩🇪 OSM DE</option>
-        <option value="esri">🏙 Esri Street</option>
-        <option value="topo">⛰ Топо</option>
-        <option value="sat">🛰 Спутник</option>
-      </select>
-      <button id="centerMe" type="button" title="Центрировать карту на мне">🎯 Найти меня</button>
+<!-- ============ ЭКРАН 3: передача ============ -->
+<section id="scr-track" class="screen">
+  <div class="status off" id="st-status">⏸ Передача остановлена</div>
+  <div class="card">
+    <div class="coords" id="co-coords">— — —</div>
+    <div class="meta" id="co-meta">ожидание GPS…</div>
+    <div id="minimap"></div>
+    <div class="row">
+      <select id="map-style-live"></select>
+      <button class="big ghost" style="margin:0;width:auto;flex:0 0 auto" id="btn-locate">🎯 Найти меня</button>
     </div>
-    <div id="myMap"></div>
-    <div class="small" id="mapInfo">Ожидание первой точки GPS…</div>
-
-    <button id="stop" class="stop hidden" style="margin-top:14px">⏹ Остановить передачу</button>
-    <button class="ghost" id="diagToggle2">🩺 Диагностика</button>
-    <div id="diag2" class="hidden" style="background:#1a1a1a;color:#d0d0d0;
-         font-family:ui-monospace,monospace;font-size:11px;padding:10px;border-radius:10px;
-         margin-top:8px;max-height:260px;overflow-y:auto;line-height:1.5;white-space:pre-wrap;
-         word-break:break-all"></div>
+    <div class="meta" id="co-info" style="margin-top:8px">—</div>
   </div>
+  <button class="big red" id="btn-stop">⏹ Остановить передачу</button>
+  <div class="log" id="log-live" style="margin-top:12px"></div>
+</section>
+
+<!-- MQTT.js с каскадным фолбэком -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.5/mqtt.min.js"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/mqtt@5.3.5/dist/mqtt.min.js';document.head.appendChild(s)"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s)"></script>
 
 <script>
-// ============================================================
-//  ЛОГ
-// ============================================================
-const LOG = [];
-function log(msg, kind) {
-  const t = new Date().toLocaleTimeString('ru-RU');
-  const line = `[${t}] ${msg}`;
-  LOG.push({ line, kind });
-  const html = LOG.map(x =>
-    `<span class="${x.kind||'info'}">${escapeHtml(x.line)}</span>`
-  ).join('\n');
-  const el1 = document.getElementById('diag');
-  const el2 = document.getElementById('diag2');
-  if (el1) { el1.innerHTML = html; el1.scrollTop = el1.scrollHeight; }
-  if (el2) { el2.innerHTML = html; el2.scrollTop = el2.scrollHeight; }
+/* =====================================================================
+   AGENT — RotaCol
+   ===================================================================== */
+'use strict';
+
+/* ---------------- логи ---------------- */
+function dlog(msg, cls) {
+  var line = '[' + new Date().toLocaleTimeString('ru-RU') + '] ' + msg;
+  ['log-setup','log-live'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    var d = document.createElement('div');
+    if (cls) d.className = cls;
+    d.textContent = line;
+    el.appendChild(d);
+    while (el.children.length > 200) el.removeChild(el.firstChild);
+    el.scrollTop = el.scrollHeight;
+  });
   console.log('[agent]', msg);
 }
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
 
-// ============================================================
-//  CDN-загрузчик
-// ============================================================
-function loadScript(url) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = url; s.async = true;
-    s.onload = () => resolve(url);
-    s.onerror = () => reject(new Error('fail ' + url));
-    document.head.appendChild(s);
-  });
-}
-function loadScriptAny(urls) {
-  let p = Promise.reject();
-  urls.forEach(u => { p = p.catch(() => loadScript(u)); });
-  return p;
-}
-const MQTT_CDNS = [
-  'https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.5/mqtt.min.js',
-  'https://cdn.jsdelivr.net/npm/mqtt@5.3.5/dist/mqtt.min.js',
-  'https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js'
-];
-const LEAFLET_CDNS = [
-  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
-  'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-];
-
-// ============================================================
-//  БАЗОВЫЕ КАРТЫ
-// ============================================================
-const BASE_MAPS = {
-  positron: {
-    name: '🌍 Positron',
-    make: () => L.tileLayer('https://tiles.openfreemap.org/styles/positron/{z}/{x}/{y}.png', {
-      maxZoom: 20, attribution: '© OpenStreetMap, © OpenFreeMap'
-    })
-  },
-  hot: {
-    name: '🛣 OSM HOT',
-    make: () => L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 19, attribution: '© OpenStreetMap, HOT'
-    })
-  },
-  de: {
-    name: '🇩🇪 OSM DE',
-    make: () => L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '© OpenStreetMap'
-    })
-  },
-  esri: {
-    name: '🏙 Esri Street',
-    make: () => L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 19, attribution: 'Tiles © Esri' }
-    )
-  },
-  topo: {
-    name: '⛰ Топо',
-    make: () => L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 17, attribution: '© OpenStreetMap, SRTM | © OpenTopoMap'
-    })
-  },
-  sat: {
-    name: '🛰 Спутник',
-    make: () => L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 19, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' }
-    )
-  }
+/* ---------------- состояние ---------------- */
+var state = {
+  id:       null,          // agent.id (a-xxxxxx)
+  name:     '',
+  car:      '',
+  topic:    '',            // код группы
+  key:      '',            // ключ группы
+  broker:   'auto',
+  mapStyle: 'positron',
+  topicPrefix: null,       // rotacol-v1/<hash24>
+  cryptoKey: null,         // CryptoKey AES-GCM
+  client:   null,
+  connected: false,
+  watching: false,
+  watchId: null,
+  lastLat: null, lastLng: null, lastAcc: null, lastSpd: null,
+  heartbeatTimer: null,
+  wakeLock: null,
+  map: null, marker: null, accuracyCircle: null, tileLayer: null
 };
 
-// ============================================================
-//  КРИПТО
-// ============================================================
-function bytesToB64url(bytes) {
-  let s = '';
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+/* ---------------- localStorage ---------------- */
+function lsGet(k, d){ try { var v = localStorage.getItem(k); return v == null ? d : v; } catch(e){ return d; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+/* ---------------- утилиты ---------------- */
+function sanitize(s){ return String(s||'').replace(/[^a-zA-Z0-9_\-]/g,'').slice(0,64); }
+function escHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function b64u(bytes){
+  var s = btoa(String.fromCharCode.apply(null, bytes));
+  return s.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-async function deriveRoomHash(groupCode, groupKey) {
-  const data = new TextEncoder().encode(groupCode + ':' + groupKey + ':v1');
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  const hex  = [...new Uint8Array(hash)]
-    .map(b => b.toString(16).padStart(2, '0')).join('');
+function unb64u(str){
+  str = String(str).replace(/-/g,'+').replace(/_/g,'/');
+  while (str.length % 4) str += '=';
+  var bin = atob(str);
+  var arr = new Uint8Array(bin.length);
+  for (var i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+function genAgentId(){
+  var s = Math.random().toString(36).slice(2, 8);
+  return 'a-' + s;
+}
+function humanAgo(ts){
+  if (!ts) return '—';
+  var d = Math.max(0, Math.floor((Date.now()-ts)/1000));
+  if (d < 60) return d + ' с назад';
+  if (d < 3600) return Math.floor(d/60) + ' мин назад';
+  if (d < 86400) return Math.floor(d/3600) + ' ч назад';
+  return Math.floor(d/86400) + ' дн назад';
+}
+
+/* ---------------- крипто ---------------- */
+async function deriveTopicHash(code, key){
+  var data = new TextEncoder().encode(code + ':' + key + ':v1');
+  var buf = await crypto.subtle.digest('SHA-256', data);
+  var hex = Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
   return hex.slice(0, 24);
 }
-async function deriveCryptoKey(groupCode, groupKey) {
-  const base = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(groupCode + ':' + groupKey + ':enc'),
-    { name: 'PBKDF2' }, false, ['deriveKey']
-  );
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: new TextEncoder().encode('rotacol-salt-v1'),
-      iterations: 100000, hash: 'SHA-256' },
-    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+async function deriveAesKey(code, key){
+  var raw = new TextEncoder().encode(code + ':' + key + ':v1');
+  var baseKey = await crypto.subtle.importKey('raw', raw, { name:'PBKDF2' }, false, ['deriveKey']);
+  var salt = new TextEncoder().encode('rotacol-salt-v1');
+  return await crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt: salt, iterations: 100000, hash:'SHA-256' },
+    baseKey, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
   );
 }
-async function encryptPayload(key, obj) {
-  const iv  = crypto.getRandomValues(new Uint8Array(12));
-  const buf = new TextEncoder().encode(JSON.stringify(obj));
-  const ct  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, buf);
-  const out = new Uint8Array(iv.length + ct.byteLength);
-  out.set(iv, 0);
-  out.set(new Uint8Array(ct), iv.length);
-  return bytesToB64url(out);
+async function encryptPayload(obj){
+  var iv = crypto.getRandomValues(new Uint8Array(12));
+  var data = new TextEncoder().encode(JSON.stringify(obj));
+  var ct = await crypto.subtle.encrypt({ name:'AES-GCM', iv: iv }, state.cryptoKey, data);
+  var out = new Uint8Array(iv.length + ct.byteLength);
+  out.set(iv, 0); out.set(new Uint8Array(ct), iv.length);
+  return b64u(out);
+}
+async function decryptPayload(payload){
+  var raw = typeof payload === 'string' ? unb64u(payload) : new Uint8Array(payload);
+  if (raw.length < 13) throw new Error('короткий payload');
+  var iv = raw.slice(0,12);
+  var ct = raw.slice(12);
+  var pt = await crypto.subtle.decrypt({ name:'AES-GCM', iv: iv }, state.cryptoKey, ct);
+  return JSON.parse(new TextDecoder().decode(pt));
 }
 
-// ============================================================
-//  ОСНОВНАЯ ЛОГИКА
-// ============================================================
-(function () {
-  const HEARTBEAT_MS  = 20000;
-  const TOPIC_PREFIX  = 'rotacol-v1';
-  const LS_AGENT_MAP  = 'agent.baseMap';
-
-  const $ = id => document.getElementById(id);
-  const permCard  = $('permissionCard');
-  const setupCard = $('setupCard');
-  const trackCard = $('trackCard');
-  const permIcon  = $('permIcon');
-  const permTitle = $('permTitle');
-  const permText  = $('permText');
-  const permStatus= $('permStatus');
-  const askPermBtn= $('askPermBtn');
-
-  const nameEl     = $('name');
-  const carEl      = $('car');
-  const topicEl    = $('topic');
-  const groupKeyEl = $('groupkey');
-  const brokerEl   = $('broker');
-  const baseMapSel = $('baseMap');
-  const mapStyleInline = $('mapStyleInline');
-  const centerBtn  = $('centerMe');
-  const startBtn   = $('start');
-  const stopBtn    = $('stop');
-  const statusEl   = $('status');
-  const coordsEl   = $('coords');
-  const metaEl     = $('meta');
-  const mapInfoEl  = $('mapInfo');
-  const mapContainer = $('myMap');
-
-  let client = null;
-  let cryptoKey = null;
-  let watchId = null, heartbeatTimer = null;
-  let lastSend = 0, lastCoords = null, wakeLock = null;
-  let pubTopic = '';
-  let permissionGranted = false;
-
-  // Карта
-  let map = null;
-  let myMarker = null;
-  let accuracyCircle = null;
-  let currentBaseLayer = null;
-  let currentBaseKey = 'positron';
-  let mapInitialized = false;
-  let firstFix = true;
-
-  // --------- Стартовая диагностика ---------
-  log('=== ДИАГНОСТИКА ОКРУЖЕНИЯ ===', 'info');
-  log('URL: ' + location.href.slice(0, 120), 'info');
-  log('Протокол: ' + location.protocol, location.protocol === 'https:' ? 'ok' : 'warn');
-  log('Secure context: ' + (window.isSecureContext ? 'ДА' : 'НЕТ'),
-      window.isSecureContext ? 'ok' : 'fail');
-  log('geolocation: ' + (navigator.geolocation ? 'есть' : 'НЕТ'),
-      navigator.geolocation ? 'ok' : 'fail');
-  log('crypto.subtle: ' + (window.crypto && crypto.subtle ? 'есть' : 'НЕТ'),
-      (window.crypto && crypto.subtle) ? 'ok' : 'fail');
-
-  if (location.protocol === 'file:' || location.protocol === 'content:') {
-    log('❌ Страница открыта как ' + location.protocol +
-        ' — Chrome Android ЗАПРЕЩАЕТ геолокацию и crypto.subtle!', 'fail');
-  }
-  if (location.protocol === 'http:' && !/localhost|127\.0\.0\.1/.test(location.host)) {
-    log('❌ HTTP без HTTPS — браузер заблокирует и GPS, и криптографию.', 'fail');
-  }
-
-  // --------- Предзаполнение ---------
-  try {
-    nameEl.value     = localStorage.getItem('agent.name')  || '';
-    carEl.value      = localStorage.getItem('agent.car')   || '';
-    topicEl.value    = localStorage.getItem('agent.topic') || '';
-    groupKeyEl.value = localStorage.getItem('agent.key')   || '';
-    brokerEl.value   = localStorage.getItem('agent.broker')|| 'auto';
-  } catch (e) {}
-  try {
-    const savedMap = localStorage.getItem(LS_AGENT_MAP);
-    if (savedMap && BASE_MAPS[savedMap]) {
-      currentBaseKey = savedMap;
-      baseMapSel.value       = savedMap;
-      mapStyleInline.value   = savedMap;
-    }
-  } catch {}
-
-  // --------- Диагностика ---------
-  $('diagToggle').addEventListener('click', () => $('diag').classList.toggle('hidden'));
-  $('diagToggle2').addEventListener('click', () => $('diag2').classList.toggle('hidden'));
-
-  // ============================================================
-  //  РАЗРЕШЕНИЕ ГЕОЛОКАЦИИ
-  // ============================================================
-  function showPermStatus(text, kind) {
-    permStatus.classList.remove('hidden', 'on', 'err', 'warn');
-    if (kind) permStatus.classList.add(kind);
-    permStatus.textContent = text;
-  }
-
-  function setPermGrantedUI() {
-    permissionGranted = true;
-    permIcon.textContent = '✅';
-    permTitle.textContent = 'Доступ разрешён';
-    permText.textContent = 'Всё готово. Переходим к настройкам.';
-    askPermBtn.classList.add('hidden');
-    showPermStatus('Геолокация разрешена', 'on');
-    log('✅ Разрешение на геолокацию получено', 'ok');
-    setTimeout(() => {
-      permCard.classList.add('hidden');
-      setupCard.classList.remove('hidden');
-      nameEl.focus();
-    }, 700);
-  }
-
-  function setPermDeniedUI() {
-    permIcon.textContent = '🚫';
-    permTitle.textContent = 'Доступ запрещён';
-    permText.innerHTML = 'Разрешите геолокацию в Chrome:<br><br>' +
-      '<b>Android:</b> 🔒 в адресной строке → «Разрешения» → «Местоположение» → «Разрешить».';
-    askPermBtn.textContent = '🔁 Попробовать снова';
-    askPermBtn.classList.remove('hidden');
-    log('❌ В разрешении на геолокацию отказано', 'fail');
-  }
-
-  function requestPermission() {
-    if (!navigator.geolocation) {
-      permIcon.textContent = '❌';
-      permTitle.textContent = 'Браузер не поддерживает геолокацию';
-      askPermBtn.classList.add('hidden');
-      log('❌ navigator.geolocation отсутствует', 'fail');
-      return;
-    }
-
-    log('Запрашиваю разрешение через getCurrentPosition…', 'info');
-    showPermStatus('Запрос разрешения… Отвечайте во всплывающем окне.');
-    askPermBtn.disabled = true;
-    askPermBtn.textContent = 'Ожидание…';
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        log('✅ Координаты получены: ' + pos.coords.latitude.toFixed(5) + ', ' +
-            pos.coords.longitude.toFixed(5), 'ok');
-        setPermGrantedUI();
-      },
-      (err) => {
-        askPermBtn.disabled = false;
-        askPermBtn.textContent = '📍 Разрешить доступ';
-        log('❌ Ошибка GPS: code=' + err.code + ' ' + err.message, 'fail');
-
-        if (err.code === 1) {
-          if (location.protocol === 'file:' || location.protocol === 'content:') {
-            log('   Причина — не HTTPS. Смотрите диагностику.', 'warn');
-            showPermStatus('Нужен HTTPS-хостинг. Смотрите диагностику ниже.', 'err');
-          } else if (!window.isSecureContext) {
-            showPermStatus('Нужен HTTPS. Откройте страницу по защищённому адресу.', 'err');
-          } else {
-            setPermDeniedUI();
-            showPermStatus('Доступ запрещён. Разрешите его в настройках.', 'err');
-          }
-        } else if (err.code === 2) {
-          showPermStatus('GPS не отвечает. Выйдите на улицу.', 'warn');
-        } else {
-          showPermStatus('Тайм-аут GPS. Попробуйте ещё раз.', 'warn');
-        }
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
-    );
-  }
-
-  async function checkExistingPermission() {
-    if (!navigator.permissions || !navigator.permissions.query) return;
+/* ---------------- брокеры ---------------- */
+var BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt'
+];
+function brokerList(){
+  if (state.broker && state.broker !== 'auto') return [state.broker];
+  return BROKERS.slice();
+}
+async function connectAnyBroker(){
+  var list = brokerList();
+  for (var i=0;i<list.length;i++){
+    var url = list[i];
     try {
-      const result = await navigator.permissions.query({ name: 'geolocation' });
-      log('Текущее состояние разрешения: ' + result.state, 'info');
-      if (result.state === 'granted') setPermGrantedUI();
-      else if (result.state === 'denied') setPermDeniedUI();
-      result.onchange = () => {
-        if (result.state === 'granted') setPermGrantedUI();
-        else if (result.state === 'denied') setPermDeniedUI();
-      };
-    } catch (e) { log('Permissions API: ' + e.message, 'warn'); }
-  }
-
-  askPermBtn.addEventListener('click', requestPermission);
-  checkExistingPermission();
-
-  // ============================================================
-  //  КАРТА АГЕНТА
-  // ============================================================
-  function setBaseLayer(key) {
-    if (!map) return;
-    if (!BASE_MAPS[key]) key = 'positron';
-    if (currentBaseLayer) map.removeLayer(currentBaseLayer);
-    currentBaseLayer = BASE_MAPS[key].make();
-    currentBaseLayer.addTo(map);
-    currentBaseKey = key;
-    baseMapSel.value     = key;
-    mapStyleInline.value = key;
-    try { localStorage.setItem(LS_AGENT_MAP, key); } catch {}
-  }
-
-  function agentIcon(pulse) {
-    return L.divIcon({
-      className: 'agent-marker-icon',
-      html: `<div class="pin${pulse ? ' pulse' : ''}"></div>`,
-      iconSize:   [22, 22],
-      iconAnchor: [11, 11]
-    });
-  }
-
-  function initAgentMap() {
-    if (mapInitialized || !window.L) return;
-    mapInitialized = true;
-
-    map = L.map('myMap', {
-      zoomControl: true,
-      attributionControl: true
-    }).setView([55.751244, 37.618423], 12);
-
-    setBaseLayer(currentBaseKey);
-
-    // Пустая подсказка, пока нет точки
-    mapInfoEl.textContent = 'Ожидание первой точки GPS…';
-  }
-
-  function updateAgentMap(c) {
-    if (!map) return;
-    const lat = c.latitude;
-    const lng = c.longitude;
-    const ll  = [lat, lng];
-
-    // Маркер
-    if (!myMarker) {
-      myMarker = L.marker(ll, {
-        icon: agentIcon(true),
-        zIndexOffset: 1000,
-        interactive: false
-      }).addTo(map);
-    } else {
-      myMarker.setLatLng(ll);
-    }
-
-    // Кружок точности
-    if (!accuracyCircle) {
-      accuracyCircle = L.circle(ll, {
-        radius: c.accuracy || 0,
-        color: '#1a1a1a',
-        weight: 1,
-        opacity: 0.5,
-        fillColor: '#1a1a1a',
-        fillOpacity: 0.08,
-        interactive: false
-      }).addTo(map);
-    } else {
-      accuracyCircle.setLatLng(ll);
-      accuracyCircle.setRadius(c.accuracy || 0);
-    }
-
-    // Первый раз центрируем карту на агента
-    if (firstFix) {
-      firstFix = false;
-      map.setView(ll, 16);
-      mapInfoEl.textContent = 'Точка определена. Карта следует за вами.';
-    }
-
-    // Обновляем инфо-строку
-    const acc = Math.round(c.accuracy || 0);
-    const speed = (c.speed != null && !isNaN(c.speed))
-      ? (c.speed * 3.6).toFixed(1) + ' км/ч'
-      : '—';
-    mapInfoEl.innerHTML =
-      `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} · ` +
-      `точность ±${acc} м · скорость ${speed}`;
-  }
-
-  centerBtn.addEventListener('click', () => {
-    if (!map || !lastCoords) {
-      mapInfoEl.textContent = 'Пока нет координат — нечего центрировать.';
-      return;
-    }
-    map.setView([lastCoords.latitude, lastCoords.longitude], 16);
-    mapInfoEl.textContent = 'Карта центрирована на вас.';
-    setTimeout(() => {
-      if (!lastCoords) return;
-      const c = lastCoords;
-      mapInfoEl.innerHTML =
-        `📍 ${c.latitude.toFixed(5)}, ${c.longitude.toFixed(5)} · ` +
-        `точность ±${Math.round(c.accuracy || 0)} м`;
-    }, 1200);
-  });
-
-  baseMapSel.addEventListener('change', () => {
-    currentBaseKey = baseMapSel.value;
-    if (mapInitialized) setBaseLayer(currentBaseKey);
-  });
-  mapStyleInline.addEventListener('change', () => {
-    currentBaseKey = mapStyleInline.value;
-    if (mapInitialized) setBaseLayer(currentBaseKey);
-  });
-
-  // ============================================================
-  //  ВСПОМОГАТЕЛЬНЫЕ
-  // ============================================================
-  function getDriverId() {
-    try {
-      let id = localStorage.getItem('agent.id');
-      if (!id) { id = 'a-' + Math.random().toString(36).slice(2, 8);
-                 localStorage.setItem('agent.id', id); }
-      return id;
-    } catch { return 'a-' + Math.random().toString(36).slice(2, 8); }
-  }
-
-  function setStatus(text, kind) {
-    statusEl.className = 'status' + (kind ? ' ' + kind : '');
-    statusEl.innerHTML = '<span class="dot ' + (kind === 'on' ? 'on' : '') +
-                         '"></span>' + text;
-  }
-
-  function sanitize(s) {
-    return String(s || '').trim().replace(/[^a-zA-Z0-9_\-]/g, '-').slice(0, 64);
-  }
-
-  async function publish(extra) {
-    if (!client || !client.connected || !cryptoKey) return false;
-    const payload = Object.assign({
-      id:   getDriverId(),
-      name: nameEl.value.trim() || 'Агент',
-      car:  carEl.value.trim(),
-      ts:   Date.now()
-    }, extra || {});
-    try {
-      const packed = await encryptPayload(cryptoKey, payload);
-      client.publish(pubTopic, packed, { qos: 1, retain: true });
-      lastSend = Date.now();
-      return true;
+      dlog('Подключение к ' + url + '…', 'i');
+      var c = await tryConnect(url);
+      return c;
     } catch (e) {
-      log('Ошибка шифрования: ' + e.message, 'fail');
-      return false;
+      dlog('Не удалось: ' + (e && e.message || e), 'w');
     }
   }
-
-  function onPosition(pos) {
-    const c = pos.coords;
-    lastCoords = c;
-
-    coordsEl.textContent = c.latitude.toFixed(6) + ', ' + c.longitude.toFixed(6) +
-                           '   (±' + Math.round(c.accuracy) + ' м)';
-    metaEl.textContent = 'Последняя отправка: ' + new Date().toLocaleTimeString('ru-RU');
-
-    // Обновляем мини-карту
-    updateAgentMap(c);
-
-    publish({
-      lat: +c.latitude.toFixed(6), lng: +c.longitude.toFixed(6),
-      accuracy: Math.round(c.accuracy),
-      speed: c.speed != null ? +c.speed.toFixed(1) : null,
-      heading: c.heading != null && !isNaN(c.heading) ? Math.round(c.heading) : null,
-      event: 'position'
-    }).then(ok => {
-      if (ok) setStatus('✅ Передача активна', 'on');
-      else    setStatus('⚠️ Нет связи с сервером — переподключение…', 'err');
+  throw new Error('Все брокеры недоступны');
+}
+function tryConnect(url){
+  return new Promise(function(resolve, reject){
+    var willTopic = state.topicPrefix + '/' + state.id;
+    var c = mqtt.connect(url, {
+      clientId: 'agent-' + state.id + '-' + Math.random().toString(36).slice(2,7),
+      clean: true,
+      reconnectPeriod: 5000,
+      connectTimeout: 8000,
+      keepalive: 30
     });
-  }
-
-  function onPositionError(err) {
-    const map = { 1: 'Доступ к геолокации запрещён.', 2: 'GPS не определяет позицию.', 3: 'Тайм-аут GPS.' };
-    log('Ошибка GPS watchPosition: code=' + err.code, 'fail');
-    setStatus('❌ ' + (map[err.code] || err.message), 'err');
-    mapInfoEl.textContent = 'GPS пока не отвечает: ' + (map[err.code] || err.message);
-  }
-
-  async function requestWakeLock() {
-    try {
-      if ('wakeLock' in navigator) {
-        wakeLock = await navigator.wakeLock.request('screen');
-        log('✅ WakeLock получен', 'ok');
-        wakeLock.addEventListener('release', () => { wakeLock = null; });
-      }
-    } catch (e) { log('WakeLock: ' + e.message, 'warn'); }
-  }
-
-  // ============================================================
-  //  MQTT
-  // ============================================================
-  function tryBroker(url, label, willPayload) {
-    return new Promise((resolve, reject) => {
-      log('Подключаюсь к ' + label + '…', 'info');
-      const driverId = getDriverId();
-      const opts = {
-        clientId: 'a-' + driverId + '-' + Math.random().toString(16).slice(2, 8),
-        clean: true, keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000,
-        will: {
-          topic: pubTopic,
-          payload: willPayload,
-          qos: 1, retain: true
-        }
-      };
-      const c = mqtt.connect(url, opts);
-      let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          log('❌ Тайм-аут к ' + label, 'fail');
-          try { c.end(true); } catch {}
-          reject(new Error('timeout'));
-        }
-      }, 11000);
-
-      c.on('connect', () => {
-        clearTimeout(timeout);
-        log('✅ Подключено к ' + label, 'ok');
-        if (!resolved) { resolved = true; resolve(c); }
-      });
-      c.on('error', (err) => {
-        log('⚠️ ' + label + ': ' + (err.message || err), 'warn');
-        if (!resolved) {
-          clearTimeout(timeout);
-          resolved = true;
-          try { c.end(true); } catch {}
-          reject(err);
-        }
-      });
-    });
-  }
-
-  async function connectAnyBroker(willPayload) {
-    let list;
-    const manual = brokerEl.value;
-    if (manual && manual !== 'auto') {
-      list = [['wss://' + manual, manual]];
-    } else {
-      list = [
-        ['wss://broker.emqx.io:8084/mqtt',     'broker.emqx.io'],
-        ['wss://broker.hivemq.com:8884/mqtt',  'broker.hivemq.com'],
-        ['wss://test.mosquitto.org:8081/mqtt', 'test.mosquitto.org']
-      ];
-    }
-    for (const [url, label] of list) {
-      try { return await tryBroker(url, label, willPayload); }
-      catch (e) { log('Пробую следующий…', 'info'); }
-    }
-    throw new Error('ни один брокер не ответил');
-  }
-
-  // ============================================================
-  //  СТАРТ
-  // ============================================================
-  startBtn.addEventListener('click', async () => {
-    const name = nameEl.value.trim();
-    const code = sanitize(topicEl.value);
-    const key  = groupKeyEl.value.trim();
-
-    if (!name) { nameEl.focus(); nameEl.style.borderColor = '#dc3545'; return; }
-    if (!code) { topicEl.focus(); topicEl.style.borderColor = '#dc3545'; return; }
-    if (!key)  { groupKeyEl.focus(); groupKeyEl.style.borderColor = '#dc3545';
-                 alert('Введите ключ группы.'); return; }
-
-    if (!permissionGranted) {
-      alert('Сначала разрешите доступ к геолокации.');
-      permCard.classList.remove('hidden');
-      setupCard.classList.add('hidden');
-      return;
-    }
-
-    if (!window.crypto || !crypto.subtle) {
-      log('❌ crypto.subtle недоступен — нужен HTTPS', 'fail');
-      alert('Криптография недоступна. Откройте страницу по HTTPS.');
-      return;
-    }
-
-    log('=== СТАРТ ПЕРЕДАЧИ ===', 'info');
-
-    try {
-      localStorage.setItem('agent.name',   name);
-      localStorage.setItem('agent.car',    carEl.value.trim());
-      localStorage.setItem('agent.topic',  topicEl.value.trim());
-      localStorage.setItem('agent.key',    key);
-      localStorage.setItem('agent.broker', brokerEl.value);
-    } catch {}
-
-    setupCard.classList.add('hidden');
-    trackCard.classList.remove('hidden');
-    startBtn.disabled = true;
-    setStatus('Криптографическая подготовка…');
-
-    // --- Крипто
-    try {
-      const t0 = Date.now();
-      const roomHash = await deriveRoomHash(code, key);
-      cryptoKey      = await deriveCryptoKey(code, key);
-      const driverId = getDriverId();
-      pubTopic       = TOPIC_PREFIX + '/' + roomHash + '/' + driverId;
-      log('✅ Крипто-параметры вычислены за ' + (Date.now() - t0) + ' мс', 'ok');
-      log('Хеш группы: ' + roomHash, 'info');
-      log('Топик: ' + pubTopic, 'info');
-    } catch (e) {
-      log('❌ Крипто: ' + e.message, 'fail');
-      setStatus('❌ Не удалось подготовить шифрование.', 'err');
-      startBtn.disabled = false;
-      setupCard.classList.remove('hidden');
-      trackCard.classList.add('hidden');
-      return;
-    }
-
-    // --- Библиотеки: MQTT + Leaflet
-    setStatus('Загрузка библиотек…');
-    try {
-      const results = await Promise.all([
-        loadScriptAny(MQTT_CDNS),
-        loadScriptAny(LEAFLET_CDNS)
-      ]);
-      log('✅ mqtt.js: ' + results[0], 'ok');
-      log('✅ Leaflet: ' + results[1], 'ok');
-    } catch (e) {
-      log('❌ Не удалось загрузить библиотеки', 'fail');
-      setStatus('❌ CDN недоступен.', 'err');
-      startBtn.disabled = false;
-      setupCard.classList.remove('hidden');
-      trackCard.classList.add('hidden');
-      return;
-    }
-
-    // --- Инициализация карты
-    setTimeout(() => {
+    var to = setTimeout(function(){ try { c.end(true); } catch(e){} reject(new Error('таймаут')); }, 9000);
+    c.once('connect', async function(){
+      clearTimeout(to);
+      dlog('✅ Подключено: ' + url, 'i');
+      // установить will (зашифрованный offline)
       try {
-        initAgentMap();
-        log('✅ Карта инициализирована', 'ok');
-      } catch (e) {
-        log('⚠️ Не удалось инициализировать карту: ' + e.message, 'warn');
-      }
-    }, 50);
+        var offPayload = await encryptPayload({ t:'off', ts: Date.now() });
+        c.publish(willTopic, offPayload, { qos:0, retain:false });
+      } catch(e){ /* ignore */ }
+      resolve(c);
+    });
+    c.once('error', function(err){
+      clearTimeout(to);
+      try { c.end(true); } catch(e){}
+      reject(err);
+    });
+  });
+}
 
-    // --- LWT
-    let willPayload;
-    try {
-      willPayload = await encryptPayload(cryptoKey, {
-        id:   getDriverId(),
-        name: nameEl.value.trim(),
-        event:'offline',
-        ts:   Date.now()
+/* ---------------- стили карт ---------------- */
+var TILES = {
+  'positron':    { url:'https://tiles.openfreemap.org/styles/positron/{z}/{x}/{y}.png', attr:'© OpenFreeMap', max:19 },
+  'osm-hot':     { url:'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', attr:'© OSM HOT', max:19 },
+  'osm-de':      { url:'https://tile.openstreetmap.de/{z}/{x}/{y}.png', attr:'© OSM DE', max:19 },
+  'esri-street': { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', attr:'© Esri', max:19 },
+  'topo':        { url:'https://a.tile.opentopomap.org/{z}/{x}/{y}.png', attr:'© OpenTopoMap', max:17 },
+  'sat':         { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr:'© Esri', max:19 }
+};
+function applyTileStyle(which){
+  var t = TILES[which] || TILES.positron;
+  if (state.tileLayer) state.map.removeLayer(state.tileLayer);
+  state.tileLayer = L.tileLayer(t.url, { maxZoom: t.max, attribution: t.attr }).addTo(state.map);
+  state.mapStyle = which;
+  lsSet('agent.baseMap', which);
+  var sel = document.getElementById('map-style-live');
+  if (sel) sel.value = which;
+}
+
+/* ---------------- UI: экраны ---------------- */
+function showScreen(id){
+  ['scr-perm','scr-setup','scr-track'].forEach(function(x){
+    var el = document.getElementById(x);
+    if (el) el.classList.toggle('on', x === id);
+  });
+}
+
+/* ---------------- GPS ---------------- */
+async function requestGpsPermission(){
+  var el = document.getElementById('perm-status');
+  el.textContent = 'Запрос…';
+  try {
+    if (!navigator.geolocation) throw new Error('Геолокация не поддерживается');
+    if (!window.isSecureContext) throw new Error('Нужен https:// (сейчас ' + location.protocol + ')');
+    await new Promise(function(res, rej){
+      navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 15000 });
+    });
+    el.innerHTML = '<span class="gps-ok">✅ Разрешение получено</span>';
+    dlog('GPS разрешён', 'i');
+    setTimeout(function(){ showScreen('scr-setup'); }, 500);
+  } catch (e) {
+    el.innerHTML = '<span class="gps-bad">❌ ' + escHtml(e.message || e) + '</span>';
+    dlog('GPS ошибка: ' + (e.message || e), 'e');
+  }
+}
+
+function startWatch(){
+  if (state.watching) return;
+  state.watching = true;
+  state.watchId = navigator.geolocation.watchPosition(onPosition, function(err){
+    dlog('watchPosition ошибка: ' + (err.message || err.code), 'e');
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  dlog('watchPosition запущен', 'i');
+}
+
+function stopWatch(){
+  if (state.watchId != null) {
+    navigator.geolocation.clearWatch(state.watchId);
+    state.watchId = null;
+  }
+  state.watching = false;
+}
+
+function onPosition(pos){
+  state.lastLat = pos.coords.latitude;
+  state.lastLng = pos.coords.longitude;
+  state.lastAcc = pos.coords.accuracy;
+  state.lastSpd = pos.coords.speed;
+  renderCoords();
+  updateMiniMarker();
+  publishPosition();
+}
+
+function renderCoords(){
+  var c = document.getElementById('co-coords');
+  var m = document.getElementById('co-meta');
+  var i = document.getElementById('co-info');
+  if (state.lastLat == null){ c.textContent = '— — —'; return; }
+  c.textContent = state.lastLat.toFixed(6) + ', ' + state.lastLng.toFixed(6);
+  m.textContent = 'точность ±' + Math.round(state.lastAcc || 0) + ' м · обновлено ' + humanAgo(Date.now());
+  var spd = state.lastSpd != null && state.lastSpd >= 0 ? (state.lastSpd * 3.6).toFixed(1) + ' км/ч' : '— км/ч';
+  i.textContent = 'Скорость: ' + spd;
+}
+
+function updateMiniMarker(){
+  if (!state.map || state.lastLat == null) return;
+  var ll = [state.lastLat, state.lastLng];
+  if (!state.marker){
+    state.marker = L.circleMarker(ll, {
+      radius: 8, color: '#fff', weight: 3, fillColor: '#000', fillOpacity: 1
+    }).addTo(state.map);
+    state.accuracyCircle = L.circle(ll, {
+      radius: state.lastAcc || 10, color: '#1f6feb', weight: 1, fillColor: '#1f6feb', fillOpacity: .12
+    }).addTo(state.map);
+    state.map.setView(ll, 16);
+  } else {
+    state.marker.setLatLng(ll);
+    state.accuracyCircle.setLatLng(ll);
+    state.accuracyCircle.setRadius(state.lastAcc || 10);
+  }
+}
+
+/* ---------------- публикация ---------------- */
+async function publishPosition(){
+  if (!state.client || !state.connected || state.lastLat == null) return;
+  var obj = {
+    t: 'pos',
+    lat: state.lastLat, lng: state.lastLng,
+    acc: state.lastAcc, spd: state.lastSpd,
+    name: state.name, car: state.car,
+    ts: Date.now()
+  };
+  try {
+    var p = await encryptPayload(obj);
+    state.client.publish(state.topicPrefix + '/' + state.id, p, { qos:0, retain:false });
+  } catch (e) {
+    dlog('Ошибка публикации: ' + (e.message || e), 'e');
+  }
+}
+
+/* ---------------- heartbeat ---------------- */
+function startHeartbeat(){
+  stopHeartbeat();
+  state.heartbeatTimer = setInterval(function(){
+    if (state.lastLat == null) return;
+    publishPosition();
+  }, 20000);
+  dlog('Heartbeat каждые 20с', 'i');
+}
+function stopHeartbeat(){
+  if (state.heartbeatTimer){ clearInterval(state.heartbeatTimer); state.heartbeatTimer = null; }
+}
+
+/* ---------------- Wake Lock ---------------- */
+async function acquireWakeLock(){
+  try {
+    if ('wakeLock' in navigator) {
+      state.wakeLock = await navigator.wakeLock.request('screen');
+      dlog('Wake Lock активен', 'i');
+      state.wakeLock.addEventListener('release', function(){
+        dlog('Wake Lock отпущен', 'w');
       });
-    } catch (e) { willPayload = ''; }
-
-    setStatus('Подключение к серверу…');
-    try {
-      client = await connectAnyBroker(willPayload);
-    } catch (e) {
-      log('❌ Все брокеры недоступны: ' + e.message, 'fail');
-      setStatus('❌ Не удалось подключиться к серверу связи.', 'err');
-      startBtn.disabled = false;
-      setupCard.classList.remove('hidden');
-      trackCard.classList.add('hidden');
-      return;
     }
+  } catch (e) { dlog('Wake Lock недоступен: ' + (e.message || e), 'w'); }
+}
+function releaseWakeLock(){
+  try { if (state.wakeLock) state.wakeLock.release(); } catch(e){}
+  state.wakeLock = null;
+}
 
-    client.on('reconnect', () => { log('MQTT: переподключение…', 'warn');
-                                   setStatus('Переподключение…', 'warn'); });
-    client.on('close',     () => { log('MQTT: соединение закрыто', 'warn');
-                                   setStatus('Нет связи, переподключение…', 'err'); });
-    client.on('error',     (e) => { log('MQTT error: ' + (e.message||e), 'fail'); });
+/* ---------------- запуск/останов передачи ---------------- */
+async function startTracking(){
+  var name = document.getElementById('in-name').value.trim();
+  var car  = document.getElementById('in-car').value.trim();
+  var code = sanitize(document.getElementById('in-topic').value);
+  var key  = document.getElementById('in-key').value;
+  if (!name) { alert('Введите имя'); return; }
+  if (!code) { alert('Введите код группы (a-zA-Z0-9_-)'); return; }
+  if (!key)  { alert('Введите ключ группы'); return; }
 
-    publish({ event: 'start' });
+  state.name = name; state.car = car;
+  state.topic = code; state.key = key;
+  state.broker = document.getElementById('in-broker').value;
+  state.mapStyle = document.getElementById('in-map').value;
 
-    log('Запускаю watchPosition…', 'info');
-    watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
-      enableHighAccuracy: true, maximumAge: 3000, timeout: 30000
-    });
+  lsSet('agent.name', name);
+  lsSet('agent.car', car);
+  lsSet('agent.topic', code);
+  lsSet('agent.key', key);
+  lsSet('agent.broker', state.broker);
+  lsSet('agent.baseMap', state.mapStyle);
 
-    heartbeatTimer = setInterval(() => {
-      if (!lastCoords) return;
-      if (Date.now() - lastSend < HEARTBEAT_MS - 1000) return;
-      const c = lastCoords;
-      publish({
-        lat: +c.latitude.toFixed(6), lng: +c.longitude.toFixed(6),
-        accuracy: Math.round(c.accuracy),
-        event: 'heartbeat'
-      });
-    }, HEARTBEAT_MS);
+  try {
+    dlog('Вывод ключей…', 'i');
+    var hash = await deriveTopicHash(code, key);
+    state.topicPrefix = 'rotacol-v1/' + hash;
+    state.cryptoKey = await deriveAesKey(code, key);
+    dlog('Топик группы: ' + state.topicPrefix, 'i');
+  } catch (e) {
+    dlog('Крипто не работает: ' + (e.message || e), 'e');
+    alert('Крипто не работает: ' + (e.message || e));
+    return;
+  }
 
-    stopBtn.classList.remove('hidden');
-    requestWakeLock();
+  try {
+    state.client = await connectAnyBroker();
+    state.connected = true;
+  } catch (e) {
+    dlog('Не удалось подключиться: ' + (e.message || e), 'e');
+    alert('MQTT: ' + (e.message || e));
+    return;
+  }
+
+  setupClient();
+  showScreen('scr-track');
+  initMiniMap();
+  startWatch();
+  startHeartbeat();
+  acquireWakeLock();
+
+  var st = document.getElementById('st-status');
+  st.textContent = '✅ Передача активна';
+  st.classList.remove('off'); st.classList.add('on');
+
+  // Попросить у диспетчера актуальные настройки группы
+  try {
+    state.client.publish(state.topicPrefix + '/_hello', '1', { qos:0, retain:false });
+  } catch(e){}
+}
+
+function setupClient(){
+  var c = state.client;
+  c.on('connect', function(){
+    state.connected = true;
+    dlog('MQTT reconnect — восстанавливаю подписку', 'i');
+    try { c.subscribe(state.topicPrefix + '/+', { qos:0 }); } catch(e){}
+  });
+  c.on('close', function(){
+    state.connected = false;
+    dlog('MQTT отключён', 'w');
+    var st = document.getElementById('st-status');
+    st.textContent = '⚠️ Нет связи — переподключение…';
+    st.classList.remove('on'); st.classList.add('off');
+  });
+  c.on('error', function(err){ dlog('MQTT error: ' + (err.message || err), 'e'); });
+
+  c.on('message', async function(topic, payload){
+    // сначала пропускаем через features
+    if (window.RotaFeatures && await RotaFeatures.handleMessage(topic, payload)) return;
+    // если фича не взяла — нам тут делать нечего
   });
 
-  // ============================================================
-  //  СТОП
-  // ============================================================
-  stopBtn.addEventListener('click', () => {
-    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-    if (heartbeatTimer) clearInterval(heartbeatTimer);
-    watchId = null; heartbeatTimer = null;
+  // подписка сразу после подключения
+  try { c.subscribe(state.topicPrefix + '/+', { qos:0 }); } catch(e){}
 
-    publish({
-      event: 'stop',
-      lat: lastCoords ? +lastCoords.latitude.toFixed(6)  : null,
-      lng: lastCoords ? +lastCoords.longitude.toFixed(6) : null
+  // сообщить features о подключении
+  if (window.RotaFeatures) {
+    RotaFeatures.attach({
+      client:      c,
+      topicPrefix: state.topicPrefix,
+      encrypt:     encryptPayload,
+      decrypt:     decryptPayload,
+      dlog:        dlog
     });
+  }
+}
 
-    if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; }
-    setTimeout(() => { if (client) { try { client.end(true); } catch {} client = null; } }, 700);
-
-    setStatus('Передача остановлена. Последняя точка сохранена у НЕБУШКА.');
-    stopBtn.classList.add('hidden');
-    startBtn.disabled = false;
-    setTimeout(() => {
-      trackCard.classList.add('hidden');
-      setupCard.classList.remove('hidden');
-    }, 1500);
-  });
-
-  window.addEventListener('beforeunload', () => {
-    if (!client || !client.connected || !cryptoKey) return;
-    try {
-      encryptPayload(cryptoKey, {
-        id:   getDriverId(),
-        name: nameEl.value.trim(),
-        event:'offline',
-        ts:   Date.now()
-      }).then(packed => {
-        try {
-          client.publish(pubTopic, packed, { qos: 1, retain: true });
-        } catch {}
+function stopTracking(){
+  stopWatch();
+  stopHeartbeat();
+  releaseWakeLock();
+  try {
+    if (state.client && state.connected && state.cryptoKey) {
+      encryptPayload({ t:'off', ts: Date.now() }).then(function(p){
+        state.client.publish(state.topicPrefix + '/' + state.id, p, { qos:0, retain:false });
       });
-    } catch {}
+    }
+  } catch(e){}
+
+  var st = document.getElementById('st-status');
+  st.textContent = '⏸ Передача остановлена';
+  st.classList.remove('on'); st.classList.add('off');
+
+  setTimeout(function(){
+    if (state.client){ try { state.client.end(true); } catch(e){} state.client = null; }
+    state.connected = false;
+    showScreen('scr-setup');
+  }, 300);
+}
+
+/* ---------------- мини-карта ---------------- */
+function initMiniMap(){
+  if (state.map) {
+    // стиль мог поменяться
+    applyTileStyle(state.mapStyle);
+    return;
+  }
+  state.map = L.map('minimap', { zoomControl: false, attributionControl: false })
+                .setView([55.75, 37.62], 14);
+  applyTileStyle(state.mapStyle);
+
+  // селектор стиля в трекере
+  var sel = document.getElementById('map-style-live');
+  Object.keys(TILES).forEach(function(k){
+    var o = document.createElement('option'); o.value = k; o.textContent = k;
+    if (k === state.mapStyle) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', function(){
+    applyTileStyle(sel.value);
+    lsSet('agent.baseMap', sel.value);
+  });
+}
+
+/* ---------------- beforeunload ---------------- */
+window.addEventListener('beforeunload', function(){
+  try {
+    if (state.client && state.connected && state.cryptoKey){
+      var p = encryptPayload({ t:'off', ts: Date.now() });
+      // синхронно не получится, но publish часто успевает уйти
+      Promise.resolve(p).then(function(payload){
+        state.client.publish(state.topicPrefix + '/' + state.id, payload, { qos:0 });
+      });
+    }
+  } catch(e){}
+});
+
+/* ---------------- init ---------------- */
+(function init(){
+  // ID агента
+  state.id = lsGet('agent.id', null);
+  if (!state.id) { state.id = genAgentId(); lsSet('agent.id', state.id); }
+  dlog('Agent ID: ' + state.id, 'i');
+
+  // восстановить настройки
+  document.getElementById('in-name').value    = lsGet('agent.name', '');
+  document.getElementById('in-car').value     = lsGet('agent.car', '');
+  document.getElementById('in-topic').value   = lsGet('agent.topic', '');
+  document.getElementById('in-key').value     = lsGet('agent.key', '');
+  document.getElementById('in-broker').value  = lsGet('agent.broker', 'auto');
+  state.mapStyle = lsGet('agent.baseMap', 'positron');
+  document.getElementById('in-map').value     = state.mapStyle;
+
+  // если разрешение уже дано — сразу на настройки
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then(function(r){
+      if (r.state === 'granted') showScreen('scr-setup');
+    }).catch(function(){});
+  }
+
+  document.getElementById('btn-perm').addEventListener('click', requestGpsPermission);
+  document.getElementById('btn-start').addEventListener('click', startTracking);
+  document.getElementById('btn-stop').addEventListener('click', stopTracking);
+  document.getElementById('btn-locate').addEventListener('click', function(){
+    if (state.map && state.lastLat != null) state.map.setView([state.lastLat, state.lastLng], 16);
   });
 })();
 </script>
