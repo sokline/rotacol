@@ -261,8 +261,19 @@ async function encryptPayload(obj){
   return b64u(out);
 }
 async function decryptPayload(payload){
-  var raw = typeof payload === 'string' ? unb64u(payload) : new Uint8Array(payload);
-  if (raw.length < 13) throw new Error('короткий payload');
+  // MQTT.js отдаёт payload как Buffer/Uint8Array.
+  // Если publish был строкой — внутри лежат UTF-8 байты base64url-строки.
+  // Сначала приводим к строке, потом декодируем base64url.
+  var str;
+  if (typeof payload === 'string') {
+    str = payload;
+  } else if (payload instanceof Uint8Array) {
+    str = new TextDecoder('utf-8').decode(payload);
+  } else {
+    str = String(payload);
+  }
+  var raw = unb64u(str);
+  if (raw.length < 13) throw new Error('короткий payload (' + raw.length + ' байт)');
   var iv = raw.slice(0,12);
   var ct = raw.slice(12);
   var pt = await crypto.subtle.decrypt({ name:'AES-GCM', iv: iv }, state.cryptoKey, ct);
